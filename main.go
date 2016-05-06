@@ -34,7 +34,6 @@ func NewDISTIL(btrdbaddr string, mongoaddr string) *DISTIL {
 	chk(err)
 	db := ses.DB(DBNAME)
 	rv.col = db.C(CNAME)
-
 	// Init btrdb
 	rv.bdb, err = btrdb.NewBTrDBConnection(btrdbaddr)
 	chk(err)

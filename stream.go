@@ -73,6 +73,26 @@ func (ds *DISTIL) ListUpmuPaths() []string {
 	return rv
 }
 
+func (ds *DISTIL) ListExistingUpmuPaths() []string {
+	q := ds.col.Find(bson.M{"Metadata.SourceName": "uPMU", "Path": bson.M{"$regex": ".*L1MAG"}})
+	rv := []string{}
+	iter := q.Iter()
+	var ob struct {
+		Id   string `bson:"uuid"`
+		Path string `bson:"Path"`
+	}
+	for iter.Next(&ob) {
+		uu := uuid.Parse(ob.Id)
+		fmt.Println("uu is", uu)
+		if !ds.StreamFromUUID(uu).Exists() {
+			fmt.Println("INF Skipping empty stream:", ob.Path)
+			continue
+		}
+		rv = append(rv, strings.TrimSuffix(ob.Path, "/L1MAG"))
+	}
+	return rv
+}
+
 func (ds *DISTIL) StreamsFromUUIDs(ids []uuid.UUID) []*Stream {
 	//loop over above
 	var streams = make([]*Stream, len(ids))
@@ -307,7 +327,6 @@ func (s *Stream) CurrentVersion() uint64 {
 	var errstr string
 	var errc chan string
 	var erri error
-
 	vrc, errc, erri = s.ds.bdb.QueryVersion([]uuid.UUID{s.id})
 	if erri != nil {
 		panic(erri)
@@ -324,7 +343,6 @@ func (s *Stream) CurrentVersion() uint64 {
 }
 
 func (s *Stream) Exists() bool {
-	var vr uint64
 	var vrc chan uint64
 	var errstr string
 	var errc chan string
@@ -335,7 +353,7 @@ func (s *Stream) Exists() bool {
 		panic(erri)
 	}
 
-	vr = <-vrc
+	<-vrc
 	errstr = <-errc
 
 	if errstr != "" {
