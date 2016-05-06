@@ -4,6 +4,7 @@ type Distillate interface {
 	Version() int
 	LeadNanos() int64
 	Rebase() Rebaser
+	Process(*InputSet, *OutputSet)
 }
 
 type DistillateTools struct {
