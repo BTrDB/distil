@@ -1,5 +1,6 @@
 package distil
 
+// This represents a range of time from Start (inclusive) to End (exclusive)
 type TimeRange struct {
 	Start int64
 	End   int64

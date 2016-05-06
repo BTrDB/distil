@@ -6,12 +6,11 @@ import (
 	"time"
 
 	btrdb "github.com/SoftwareDefinedBuildings/btrdb-go"
-	"github.com/pborman/uuid"
 	"gopkg.in/mgo.v2"
 )
 
-const DBNAME = "qdf"
-const CNAME = "metadata2"
+const dbName = "qdf"
+const colName = "metadata2"
 const MaxVersionSet = 100
 
 func chk(e error) {
@@ -21,38 +20,44 @@ func chk(e error) {
 	}
 }
 
+// DISTIL is a handle to the distil engine, including it's connections
+// to BTrDB and MongoDB
 type DISTIL struct {
 	col         *mgo.Collection
 	bdb         *btrdb.BTrDBConnection
 	distillates []*handle
 }
 
+// NewDISTIL creates a DISTIL handle by connecting to the given
+// BTrDB and MongoDB addresses
 func NewDISTIL(btrdbaddr string, mongoaddr string) *DISTIL {
 	rv := DISTIL{}
 	// Init mongo
 	ses, err := mgo.Dial(mongoaddr)
 	chk(err)
-	db := ses.DB(DBNAME)
-	rv.col = db.C(CNAME)
+	db := ses.DB(dbName)
+	rv.col = db.C(colName)
 	// Init btrdb
 	rv.bdb, err = btrdb.NewBTrDBConnection(btrdbaddr)
 	chk(err)
 	return &rv
 }
 
-func (ds *DISTIL) Resolve(path string) uuid.UUID {
-	//For sam to do
-	return uuid.NewUUID()
-}
+// func (ds *DISTIL) Resolve(path string) uuid.UUID {
+// 	//For sam to do
+// 	return uuid.NewUUID()
+// }
+//
+// func (ds *DISTIL) ResolveAll(paths []string) []uuid.UUID {
+// 	rv := make([]uuid.UUID, len(paths))
+// 	for i := 0; i < len(rv); i++ {
+// 		rv[i] = ds.Resolve(paths[i])
+// 	}
+// 	return rv
+// }
 
-func (ds *DISTIL) ResolveAll(paths []string) []uuid.UUID {
-	rv := make([]uuid.UUID, len(paths))
-	for i := 0; i < len(rv); i++ {
-		rv[i] = ds.Resolve(paths[i])
-	}
-	return rv
-}
-
+// Registration is a handle to a specific instance of a distillate, along
+// with the information required to prepare it it
 type Registration struct {
 	Instance    Distillate
 	UniqueName  string
@@ -67,6 +72,9 @@ type handle struct {
 	outputs []*Stream
 }
 
+// RegisterDistillate needs to be called once per instance of distillate
+// with a populated Registration struct. Do not reuse the Registration
+// struct, it is owned by the engine after this call.
 func (ds *DISTIL) RegisterDistillate(r *Registration) {
 	if r.UniqueName == "" {
 		fmt.Println("Aborting. Cannot register a distillate with no UniqueName")
@@ -80,11 +88,13 @@ func (ds *DISTIL) RegisterDistillate(r *Registration) {
 		d:   r.Instance,
 		reg: *r,
 	}
+	r.Instance.SetEngine(ds)
 	h.inputs = ds.StreamsFromPaths(h.reg.InputPaths)
 	h.outputs = ds.MakeOrGetByPaths(h.reg.OutputPaths)
 	ds.distillates = append(ds.distillates, &h)
 }
 
+// StartEngine begins processing distillates. It does not return
 func (ds *DISTIL) StartEngine() {
 	for _, h := range ds.distillates {
 		go h.ProcessLoop()
@@ -191,6 +201,12 @@ func (h *handle) ProcessLoop() {
 	}
 }
 
+// FromEnvVars is a utility function for use with NewDISTIL that will read
+// the BTrDB and Mongo addresses from the environment variables $DISTIL_BTRDB_ADDR
+// and $DISTIL_MONGO_ADDR respectively. For example:
+//
+//   distil.NewDISTIL(distil.FromEnvVars())
+//
 func FromEnvVars() (string, string) {
 	btrdbAddr := os.Getenv("DISTIL_BTRDB_ADDR")
 	mongoAddr := os.Getenv("DISTIL_MONGO_ADDR")
@@ -205,16 +221,26 @@ func FromEnvVars() (string, string) {
 	return btrdbAddr, mongoAddr
 }
 
+// An InputSet is passed to the Process method of a distillate, it contains
+// preloaded data for the changed time range (plus any lead time).
 type InputSet struct {
 	startIndexes []int
 	samples      [][]Point
 	tr           TimeRange
 }
+
+// A Point is the primitive telemetry data type
 type Point struct {
+	// Time since the Unix epoch in nanoseconds
 	T int64
+	// Value
 	V float64
 }
 
+// Get a data point from the InputSet, stream is an index into the InputPaths
+// declared in the registration, sample is the point you wish to get. Sample
+// 0 is the first sample in the changed range. Negative indices are lead samples
+// (see LeadNanos) that can be used for context.
 func (is *InputSet) Get(stream int, sample int) Point {
 	if stream < 0 || stream >= len(is.samples) {
 		panic(fmt.Sprintf("Distillate attempted to access stream outside InputSet: %d", stream))
@@ -227,6 +253,8 @@ func (is *InputSet) Get(stream int, sample int) Point {
 	}
 	return is.samples[stream][realSample]
 }
+
+// Get the number of positive samples in the given stream
 func (is *InputSet) NumSamples(stream int) int {
 	if stream < 0 || stream >= len(is.samples) {
 		panic(fmt.Sprintf("Distillate attempted to access stream outside InputSet: %d", stream))
@@ -234,6 +262,8 @@ func (is *InputSet) NumSamples(stream int) int {
 	}
 	return len(is.samples[stream]) - is.startIndexes[stream]
 }
+
+// Get the number of negative samples (lead samples) in the given stream
 func (is *InputSet) NumLeadSamples(stream int) int {
 	if stream < 0 || stream >= len(is.samples) {
 		panic(fmt.Sprintf("Distillate attempted to access stream outside InputSet: %d", stream))
@@ -241,15 +271,21 @@ func (is *InputSet) NumLeadSamples(stream int) int {
 	}
 	return is.startIndexes[stream]
 }
+
+// Get the time range that has changed that is being processed. This does not include
+// lead time
 func (is *InputSet) GetRange() TimeRange {
 	return is.tr
 }
 
+// OutputSet is a handle onto the output streams and is used for writing back data
+// from processing
 type OutputSet struct {
 	outbufs   [][]Point
 	ownership TimeRange
 }
 
+// Add a point to the given stream
 func (oss *OutputSet) AddPoint(stream int, p Point) {
 	if stream < 0 || stream >= len(oss.outbufs) {
 		panic(fmt.Sprintf("Distillate attempted to access stream outside OutputSet: %d", stream))
@@ -261,9 +297,17 @@ func (oss *OutputSet) AddPoint(stream int, p Point) {
 	}
 	oss.outbufs[stream] = append(oss.outbufs[stream], p)
 }
+
+// A utility function, this constructs a point and calls AddPoint
 func (oss *OutputSet) Add(stream int, time int64, val float64) {
 	oss.AddPoint(stream, Point{time, val})
 }
+
+// Set the time range that this OutputSet is responsible for. This must be
+// done before any points are added, and any points outside this range will
+// be discarded. Any points that existed in the stream before the current
+// Process that lie within this range will be deleted and replaced by the
+// data in the current output set
 func (oss *OutputSet) SetRange(r TimeRange) {
 	oss.ownership = r
 }

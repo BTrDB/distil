@@ -11,8 +11,11 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-const CHANGED_RANGE_RES uint8 = 38
+const changedRangeRes uint8 = 38
 
+// Stream represents a handle on a specific stream and can be used for
+// querying and inserting data on it. You should not need to use this
+// directly
 type Stream struct {
 	ds   *DISTIL
 	id   uuid.UUID
@@ -39,6 +42,7 @@ func findAssertOne(col *mgo.Collection, key string, value string) bson.M {
 	return result
 }
 
+// Obtain a Stream given a UUID
 func (ds *DISTIL) StreamFromUUID(id uuid.UUID) *Stream {
 	//return nil if it doesn't exist
 	var result bson.M = findAssertOne(ds.col, "uuid", id.String())
@@ -60,6 +64,10 @@ func (ds *DISTIL) StreamFromUUID(id uuid.UUID) *Stream {
 	return &Stream{ds: ds, id: id, path: path}
 }
 
+// ListUpmuPaths will get a list of all prefixes that look like they have a uPMU under
+// them in the metadata. Note that these streams may not exist or may be empty.
+// The heuristic is to look for L1MAG streams with a "uPMU" SourceName, and then strip
+// off the suffix
 func (ds *DISTIL) ListUpmuPaths() []string {
 	q := ds.col.Find(bson.M{"Metadata.SourceName": "uPMU", "Path": bson.M{"$regex": ".*L1MAG"}})
 	rv := []string{}
@@ -73,6 +81,9 @@ func (ds *DISTIL) ListUpmuPaths() []string {
 	return rv
 }
 
+// This is similar to ListUpmuPaths but it will query BTrDB to see how many
+// points are in each L1MAG stream and it will not return the path if the
+// stream is empty
 func (ds *DISTIL) ListExistingUpmuPaths() []string {
 	q := ds.col.Find(bson.M{"Metadata.SourceName": "uPMU", "Path": bson.M{"$regex": ".*L1MAG"}})
 	rv := []string{}
@@ -93,6 +104,7 @@ func (ds *DISTIL) ListExistingUpmuPaths() []string {
 	return rv
 }
 
+// Obtain a slice of streams corresponding to the given UUIDs
 func (ds *DISTIL) StreamsFromUUIDs(ids []uuid.UUID) []*Stream {
 	//loop over above
 	var streams = make([]*Stream, len(ids))
@@ -102,6 +114,7 @@ func (ds *DISTIL) StreamsFromUUIDs(ids []uuid.UUID) []*Stream {
 	return streams
 }
 
+// Obtain a stream based on a path
 func (ds *DISTIL) StreamFromPath(path string) *Stream {
 	//Resolve path to uuid and call stream from uuid
 	var result bson.M = findAssertOne(ds.col, "Path", path)
@@ -128,6 +141,7 @@ func (ds *DISTIL) StreamFromPath(path string) *Stream {
 	return &Stream{ds: ds, id: id, path: path}
 }
 
+// Obtain multiple streams based on paths
 func (ds *DISTIL) StreamsFromPaths(paths []string) []*Stream {
 	//loop over StreamFromPath
 	var streams = make([]*Stream, len(paths))
@@ -137,17 +151,10 @@ func (ds *DISTIL) StreamsFromPaths(paths []string) []*Stream {
 	return streams
 }
 
-// This is the same as StreamFromPath if
-// the path exists, otherwise it creates
-// a new stream with that path (and a new uuid)
-// and returns it.
-/* NOTE: This function should NOT be called concurrently with the same PATH. */
+// This is the same as StreamFromPath, but if the path does not exist, it will
+// create the stream
+// NOTE: This function should NOT be called concurrently with the same path.
 func (ds *DISTIL) MakeOrGetByPath(path string) *Stream {
-	//if stream does not exist then create metadata for
-	//the stream
-	//see https://github.com/immesys/distil-spark/blob/master/src/scala/io/btrdb/distil/dsl.scala#L173
-	//and create the metadata a bit like that (assu)
-
 	var stream *Stream = ds.StreamFromPath(path)
 	if stream != nil {
 		return stream
@@ -174,6 +181,8 @@ func (ds *DISTIL) MakeOrGetByPath(path string) *Stream {
 
 	return &Stream{ds: ds, id: id, path: path}
 }
+
+// Same as MakeOrGetByPath but does multiple
 func (ds *DISTIL) MakeOrGetByPaths(paths []string) []*Stream {
 	var streams = make([]*Stream, len(paths))
 	for i, path := range paths {
@@ -182,11 +191,9 @@ func (ds *DISTIL) MakeOrGetByPaths(paths []string) []*Stream {
 	return streams
 }
 
+// Get the last version of the stream that uniqueName processed
 func (s *Stream) TagVersion(uniqueName string) uint64 {
-	//Get the metadata key from this stream
-	// distil.<uniquename>
-	//and parse it as int
-	//panic on any error
+
 	var result bson.M = findAssertOne(s.ds.col, "Path", s.path)
 	if result == nil {
 		panic(fmt.Sprintf("Could not find document for Path %s", s.path))
@@ -211,6 +218,7 @@ func (s *Stream) TagVersion(uniqueName string) uint64 {
 	return uint64(val)
 }
 
+// Set the last version of the stream that uniqueName processed
 func (s *Stream) SetTagVersion(uniqueName string, version uint64) {
 	var selector = bson.M{
 		"uuid": s.id.String(),
@@ -228,6 +236,7 @@ func (s *Stream) SetTagVersion(uniqueName string, version uint64) {
 
 }
 
+// Obtain the changed ranges between the two versions
 func (s *Stream) ChangesBetween(oldversion uint64, newversion uint64) []TimeRange {
 	//Do the btrdb query, read the results from the chan into a slice
 	//panic on any error
@@ -238,7 +247,7 @@ func (s *Stream) ChangesBetween(oldversion uint64, newversion uint64) []TimeRang
 	var erri error
 	var errstr string
 
-	trc, _, errc, erri = s.ds.bdb.QueryChangedRanges(s.id, oldversion, newversion, CHANGED_RANGE_RES)
+	trc, _, errc, erri = s.ds.bdb.QueryChangedRanges(s.id, oldversion, newversion, changedRangeRes)
 	if erri != nil {
 		panic(erri)
 	}
@@ -254,6 +263,7 @@ func (s *Stream) ChangesBetween(oldversion uint64, newversion uint64) []TimeRang
 	return trslice
 }
 
+// Get points from the stream, applying the given rebase
 func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version uint64) []Point {
 	//feed the resulting channel through rebase.Process and turn it into
 	//a []Point slice
@@ -284,6 +294,7 @@ func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version uint64) []Point 
 	return ptslice
 }
 
+// Erase everything in the stream that falls inside the given time range
 func (s *Stream) EraseRange(r TimeRange) {
 	var statc chan string
 	var stat string
@@ -300,6 +311,7 @@ func (s *Stream) EraseRange(r TimeRange) {
 	}
 }
 
+// Write the given points to the stream
 func (s *Stream) WritePoints(p []Point) {
 	var statc chan string
 	var stat string
@@ -321,6 +333,7 @@ func (s *Stream) WritePoints(p []Point) {
 	}
 }
 
+// Get the current version of the stream
 func (s *Stream) CurrentVersion() uint64 {
 	var vr uint64
 	var vrc chan uint64
@@ -342,6 +355,7 @@ func (s *Stream) CurrentVersion() uint64 {
 	return vr
 }
 
+// This checks if there is any data in the stream
 func (s *Stream) Exists() bool {
 	var vrc chan uint64
 	var errstr string
