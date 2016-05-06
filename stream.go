@@ -171,7 +171,7 @@ func (s *Stream) ChangesSince(version int64) []TimeRange {
 	//panic on any error
 }
 
-func (s *Stream) GetPoints(r TimeRange, rebase Rebaser) []Point {
+func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version int64) []Point {
 	//TODO sam
 	//feed the resulting channel through rebase.Process and turn it into
 	//a []Point slice
@@ -186,5 +186,9 @@ func (s *Stream) WritePoints(p []Point) {
 }
 
 func (s *Stream) CurrentVersion() int64 {
+	//TODO sam
+}
+
+func (s *Stream) ChangesBetween(fromV, toV int64) []TimeRange {
 	//TODO sam
 }

@@ -12,6 +12,7 @@ import (
 
 const DBNAME = "qdf"
 const CNAME = "metadata"
+const MaxVersionSet = 1000
 
 func chk(e error) {
 	if e != nil {
@@ -97,20 +98,29 @@ func (h *handle) ProcessLoop() {
 		then := time.Now()
 
 		versions := make([]int64, len(h.inputs))
+		headversions := make([]int64, len(h.inputs))
+		some := false
 		for idx, in := range h.inputs {
 			versions[idx] = in.TagVersion(h.reg.UniqueName)
+			headversions[idx] = in.CurrentVersion()
+			if headversions[idx]-versions[idx] > MaxVersionSet {
+				headversions[idx] = versions[idx] + MaxVersionSet
+			}
+			if headversions[idx] != versions[idx] {
+				some = true
+			}
+		}
+
+		if !some {
+			fmt.Printf("NOP %s \n", h.reg.UniqueName)
+			time.Sleep(5 * time.Second)
+			continue
 		}
 
 		//Find the changed ranges
 		chranges := make([]TimeRange, 0, 20)
 		for idx, in := range h.inputs {
-			chranges = append(chranges, in.ChangesSince(versions[idx])...)
-		}
-
-		if len(chranges) == 0 {
-			fmt.Printf("NOP %s \n", h.reg.UniqueName)
-			time.Sleep(5 * time.Second)
-			continue
+			chranges = append(chranges, in.ChangesBetween(versions[idx], headversions[idx])...)
 		}
 
 		lastt := int64(0)
@@ -131,7 +141,7 @@ func (h *handle) ProcessLoop() {
 			originalStartTime := r.Start
 			r.Start -= h.d.LeadNanos()
 			for idx, in := range h.inputs {
-				is.samples[idx] = in.GetPoints(r, h.d.Rebase())
+				is.samples[idx] = in.GetPoints(r, h.d.Rebase(), headversions[idx])
 				//Find the index of the original start of range
 				is.startIndexes[idx] = len(is.samples[idx])
 				for search := 0; search < len(is.samples[idx]); search++ {
@@ -168,7 +178,7 @@ func (h *handle) ProcessLoop() {
 
 		//Update the tag version
 		for idx, in := range h.inputs {
-			in.SetTagVersion(h.reg.UniqueName, versions[idx])
+			in.SetTagVersion(h.reg.UniqueName, headversions[idx])
 		}
 
 		fmt.Printf("FIN %s \n  >> latest at %s\n  >> took %.2f seconds to compute\n",
