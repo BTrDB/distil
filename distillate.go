@@ -32,7 +32,7 @@ type Distillate interface {
 //   type MyDistillate struct {
 //     distil.DistillateTools
 //     //your additional fields
-//	 }
+//   }
 //
 type DistillateTools struct {
 	DS *DISTIL
