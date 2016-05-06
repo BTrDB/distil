@@ -159,3 +159,59 @@ func TestExtraSpaceJitter(t *testing.T) {
 		}
 	}
 }
+func TestExtraSpaceMissingJitter(t *testing.T) {
+	s := makeAligned(2, 5)
+	var ns []btrdb.StandardValue = make([]btrdb.StandardValue, len(s) >> 1)
+	
+	for m := range ns {
+		ns[m] = s[m << 1]
+	}
+	
+	half_space := ((SPACING_INT64 - 2) / 2)
+	for k := range ns {
+		ns[k].Time += (rand.Int63n(SPACING_INT64 - 2) - half_space)
+	}
+	
+	var c chan btrdb.StandardValue = sliceToChan(ns)
+	var pnr Rebaser = RebasePadSnap(FREQ)
+	
+	var oc chan btrdb.StandardValue = pnr.Process(1 * NANO, 6 * NANO, c)
+	var os []btrdb.StandardValue = chanToSlice(oc)
+	
+	var explen int64 = int64(len(s)) + 2 * FREQ
+	if int64(len(os)) != explen {
+		t.Fatalf("Output has %d points (expected %d)", len(os), explen)
+	}
+	
+	var i int64
+	for i = 0; i < FREQ; i++ {
+		expt := (1 * NANO) + i * SPACING_INT64
+		if os[i].Time != expt || !math.IsNaN(os[i].Value) {
+			t.Logf("Got (%d, %f) at entry %d; expected (%d, NaN)", os[i].Time, os[i].Value, i, expt)
+			t.Fail()
+		}
+	}
+	for i = 0; i < FREQ; i++ {
+		expt := (5 * NANO) + i * SPACING_INT64
+		j := i + 4 * FREQ
+		if os[j].Time != expt || !math.IsNaN(os[j].Value) {
+			t.Logf("Got (%d, %f) at entry %d; expected (%d, NaN)", os[j].Time, os[j].Value, j, expt)
+			t.Fail()
+		}
+	}
+	
+	for j := range s {
+		i := int64(j) + FREQ
+		if (i & 0x1) == 0 {
+			if os[i].Time != s[j].Time || !floatEquals(os[i].Value, s[j].Value) {
+				t.Logf("Got (%d, %f) at entry %d; expected (%d, %f)", os[i].Time, os[i].Value, j, s[j].Time, s[j].Value)
+				t.Fail()
+			}
+		} else {
+			if os[i].Time != s[j].Time || !math.IsNaN(os[i].Value) {
+				t.Logf("Got (%d, %f) at entry %d; expected (%d, NaN)", os[i].Time, os[i].Value, j, s[j].Time)
+				t.Fail()
+			}
+		}
+	}
+}
