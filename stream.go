@@ -322,3 +322,25 @@ func (s *Stream) CurrentVersion() uint64 {
 
 	return vr
 }
+
+func (s *Stream) Exists() bool {
+	var vr uint64
+	var vrc chan uint64
+	var errstr string
+	var errc chan string
+	var erri error
+
+	vrc, errc, erri = s.ds.bdb.QueryVersion([]uuid.UUID{s.id})
+	if erri != nil {
+		panic(erri)
+	}
+
+	vr = <-vrc
+	errstr = <-errc
+
+	if errstr != "" {
+		return false
+	}
+
+	return true
+}
