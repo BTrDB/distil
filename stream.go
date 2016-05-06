@@ -188,16 +188,12 @@ func (s *Stream) ChangesBetween(oldversion uint64, newversion uint64) []TimeRang
 	var errc chan string
 	var erri error
 	var errstr string
-	var ok bool
+	
 	trc, _, errc, erri = s.ds.bdb.QueryChangedRanges(s.id, oldversion, newversion, CHANGED_RANGE_RES)
 	if erri != nil {
 		panic(erri)
 	}
-	for {
-		tr, ok = <- trc
-		if ok {
-			break
-		}
+	for tr = range trc {
 		trslice = append(trslice, TimeRange{ Start: tr.StartTime, End: tr.EndTime })
 	}
 	
@@ -219,7 +215,7 @@ func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version uint64) []Point 
 	var errc chan string
 	var erri error
 	var errstr string
-	var ok bool
+	
 	ptc, _, errc, erri = s.ds.bdb.QueryStandardValues(s.id, r.Start, r.End, version)
 	if erri != nil {
 		panic(erri)
@@ -231,13 +227,11 @@ func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version uint64) []Point 
 		panic(erri)
 	}
 	
-	for {
-		pt, ok = <- rbc
-		if ok {
-			return ptslice
-		}
+	for pt = range rbc {
 		ptslice = append(ptslice, Point{ T: pt.Time, V: pt.Value })
 	}
+	
+	return ptslice
 }
 
 func (s *Stream) EraseRange(r TimeRange) {
