@@ -10,7 +10,7 @@ import (
 )
 
 const dbName = "qdf"
-const colName = "metadata2"
+const colName = "metadata"
 
 // This is the maximum number of versions that will be processed at once
 const MaxVersionSet = 100
