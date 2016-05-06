@@ -19,6 +19,7 @@ func maxInt64(x int64, y int64) int64 {
 
 /* Translation of Michael's code at
  * https://github.com/immesys/distil-spark/blob/master/src/scala/io/btrdb/distil/distiller.scala#L139
+ * NOTE: This function may modify the input slice's contents (but not its length).
  */
 func expandPrereqsParallel(changedRanges []TimeRange) []TimeRange {
 	var ranges = changedRanges
