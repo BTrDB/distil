@@ -177,13 +177,16 @@ func (s *Stream) TagVersion(uniqueName string) uint64 {
 }
 
 func (s *Stream) SetTagVersion(uniqueName string, version uint64) {
+	var selector = bson.M{
+		"uuid": s.id.String(),
+	}
 	var metadata = bson.M{
 		"$set": bson.M{
 			fmt.Sprintf("distil.%s", uniqueName): version,
 		},
 	}
 
-	var err error = s.ds.col.Insert(metadata)
+	var err error = s.ds.col.Update(selector, metadata)
 	if err != nil {
 		panic(err)
 	}
