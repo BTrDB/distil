@@ -159,15 +159,15 @@ func (s *Stream) TagVersion(uniqueName string) uint64 {
 
 	distilint, ok := result["distil"]
 	if !ok {
-		panic(fmt.Sprintf("Document for Path %s is missing required field 'distil'", s.path))
+		return 1
 	}
 	distil, ok := distilint.(bson.M)
 	if !ok {
-		panic(fmt.Sprintf("Document for Path %s has 'distil' key not mapped object", s.path))
+		panic(fmt.Sprintf("Document for Path %s has 'distil' key not mapped to object", s.path))
 	}
 	valint, ok := distil[uniqueName]
 	if !ok {
-		panic(fmt.Sprintf("Document for distillate %s not found for stream with Path %s", uniqueName, s.path))
+		return 1
 	}
 	val, ok := valint.(uint64)
 	if !ok {
@@ -219,7 +219,7 @@ func (s *Stream) ChangesBetween(oldversion uint64, newversion uint64) []TimeRang
 func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version uint64) []Point {
 	//feed the resulting channel through rebase.Process and turn it into
 	//a []Point slice
-	var ptslice = make([]Point, 0, (r.End-r.Start)<<7)
+	var ptslice = make([]Point, 0, (r.End - r.Start) * 130 / 1000000000)
 
 	var pt btrdb.StandardValue
 	var ptc chan btrdb.StandardValue
