@@ -236,13 +236,14 @@ func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version uint64) []Point 
 	}
 
 	var rbc chan btrdb.StandardValue = rebase.Process(r.Start, r.End, ptc)
-	errstr = <-errc // Maybe I should change this into a nonblocking read() using select?
-	if errstr != "" {
-		panic(erri)
-	}
 
 	for pt = range rbc {
 		ptslice = append(ptslice, Point{T: pt.Time, V: pt.Value})
+	}
+	
+	errstr = <-errc // Maybe I should change this into a nonblocking read() using select?
+	if errstr != "" {
+		panic(erri)
 	}
 
 	return ptslice
