@@ -182,5 +182,9 @@ func (s *Stream) EraseRange(r TimeRange) {
 }
 
 func (s *Stream) WritePoints(p []Point) {
+	//TODO sam
+}
 
+func (s *Stream) CurrentVersion() int64 {
+	//TODO sam
 }

@@ -189,26 +189,26 @@ type Point struct {
 func (is *InputSet) Get(stream int, sample int) Point {
 	if stream < 0 || stream >= len(is.samples) {
 		panic(fmt.Sprintf("Distillate attempted to access stream outside InputSet: %d", stream))
-		os.Exit(1)
+		//os.Exit(1)
 	}
 	realSample := sample + is.startIndexes[stream]
 	if realSample < 0 || realSample >= len(is.samples[stream]) {
 		panic(fmt.Sprintf("Distillate attempted to access sample outside InputSet.\nstream=%d sample=%d realsample=%d", stream, sample, realSample))
-		os.Exit(1)
+		//os.Exit(1)
 	}
 	return is.samples[stream][realSample]
 }
 func (is *InputSet) NumSamples(stream int) int {
 	if stream < 0 || stream >= len(is.samples) {
 		panic(fmt.Sprintf("Distillate attempted to access stream outside InputSet: %d", stream))
-		os.Exit(1)
+		//os.Exit(1)
 	}
 	return len(is.samples[stream]) - is.startIndexes[stream]
 }
 func (is *InputSet) NumLeadSamples(stream int) int {
 	if stream < 0 || stream >= len(is.samples) {
 		panic(fmt.Sprintf("Distillate attempted to access stream outside InputSet: %d", stream))
-		os.Exit(1)
+		//os.Exit(1)
 	}
 	return is.startIndexes[stream]
 }
@@ -224,11 +224,11 @@ type OutputSet struct {
 func (oss *OutputSet) AddPoint(stream int, p Point) {
 	if stream < 0 || stream >= len(oss.outbufs) {
 		panic(fmt.Sprintf("Distillate attempted to access stream outside OutputSet: %d", stream))
-		os.Exit(1)
+		//os.Exit(1)
 	}
 	if p.T < oss.ownership.Start || p.T >= oss.ownership.End {
 		panic("Distillate attempted to write outside its Range")
-		os.Exit(1)
+		//os.Exit(1)
 	}
 	oss.outbufs[stream] = append(oss.outbufs[stream], p)
 }
