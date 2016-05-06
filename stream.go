@@ -1,15 +1,13 @@
 package distil
 
-<<<<<<< Updated upstream
 import (
 	"fmt"
-	"github.com/SoftwareDefinedBuildings/btrdb-go"
+
 	"github.com/pborman/uuid"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
-
 
 type Stream struct {
 	ds   *DISTIL
@@ -17,9 +15,8 @@ type Stream struct {
 	path string
 }
 
-
 func findAssertOne(col *mgo.Collection, key string, val string) bson.M {
-	var q *mgo.Query = ds.col.Find(bson.M{ key: value })
+	var q *mgo.Query = ds.col.Find(bson.M{key: value})
 	c, err := q.Count()
 	if err != nil {
 		panic(err)
@@ -48,7 +45,7 @@ func (ds *DISTIL) StreamFromUUID(id uuid.UUID) *Stream {
 		panic(fmt.Sprintf("Document for UUID %s is missing required field 'Path'", id.String()))
 	}
 
-	return &Stream{ ds: ds, id: id, path: path }
+	return &Stream{ds: ds, id: id, path: path}
 }
 
 func (ds *DISTIL) StreamsFromUUIDs(ids []uuid.UUID) []*Stream {
@@ -74,7 +71,7 @@ func (ds *DISTIL) StreamFromPath(path string) *Stream {
 		panic(fmt.Sprintf("Document for Path %s has invalid UUID %s", path, uuidstr))
 	}
 
-	return &Stream{ ds: ds, id: id, path: path }
+	return &Stream{ds: ds, id: id, path: path}
 }
 
 func (ds *DISTIL) StreamsFromPaths(paths []string) []*Stream {
@@ -107,11 +104,11 @@ func (ds *DISTIL) MakeOrGetByPath(path string) *Stream {
 		"uuid": id.String(),
 		"Path": path,
 		"Properties": bson.M{
-			"Timezone": "America/Los_Angeles",
+			"Timezone":      "America/Los_Angeles",
 			"UnitofMeasure": "Unspecified",
-			"UnitofTime": "ns",
-			"ReadingType": "double",
-			"SourceName": "BTS",
+			"UnitofTime":    "ns",
+			"ReadingType":   "double",
+			"SourceName":    "BTS",
 		},
 		"Metadata": bson.M{},
 	}
@@ -121,7 +118,7 @@ func (ds *DISTIL) MakeOrGetByPath(path string) *Stream {
 		panic(err)
 	}
 
-	return &Stream{ ds: ds, id: id, path: path }
+	return &Stream{ds: ds, id: id, path: path}
 }
 func (ds *DISTIL) MakeOrGetByPaths(paths []string) []*Stream {
 	var streams = make([]*Stream, len(paths))
@@ -145,7 +142,7 @@ func (s *Stream) TagVersion(uniqueName string) int64 {
 	}
 	distil, ok := distilint.(bson.M)
 	if !ok {
-		panic(fmt.Sprintf("Document for Path %s has 'distil' key not mapped object", s.Path)
+		panic(fmt.Sprintf("Document for Path %s has 'distil' key not mapped object", s.Path))
 	}
 	valint, ok := distil[uniqueName]
 	if !ok {
@@ -155,7 +152,6 @@ func (s *Stream) TagVersion(uniqueName string) int64 {
 	if !ok {
 		panic(fmt.Sprintf("Value for TagVersion of distillate %s for stream with Path %s is not an int64", uniquename, s.Path))
 	}
-
 	return val
 }
 
@@ -166,7 +162,6 @@ func (s *Stream) SetTagVersion(uniqueName string, version int64) {
 			fmt.Sprintf("distil.%s", uniqueName): version,
 		},
 	}
-
 
 }
 
@@ -180,4 +175,12 @@ func (s *Stream) GetPoints(r TimeRange, rebase Rebaser) []Point {
 	//TODO sam
 	//feed the resulting channel through rebase.Process and turn it into
 	//a []Point slice
+}
+
+func (s *Stream) EraseRange(r TimeRange) {
+	//TODO sam
+}
+
+func (s *Stream) WritePoints(p []Point) {
+
 }

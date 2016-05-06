@@ -1,4 +1,4 @@
-package distiller
+package distil
 
 import (
 	"testing"
@@ -6,11 +6,11 @@ import (
 
 func testExpandPrereqsParallel(t *testing.T, input []TimeRange, expoutput []TimeRange) {
 	var output = expandPrereqsParallel(input)
-	
+
 	if len(output) != len(expoutput) {
 		t.Fatalf("Output has %d intervals (expected %d)", len(output), len(expoutput))
 	}
-	
+
 	var i int
 	for i = 0; i < len(output); i++ {
 		if expoutput[i].start != output[i].start {
@@ -32,10 +32,10 @@ func TestAllSeparate(t *testing.T) {
 	input[3].end = 123
 	input[4].start = 123456
 	input[4].end = 2102031928
-	
+
 	var expoutput = make([]TimeRange, len(input))
 	copy(expoutput, input)
-	
+
 	testExpandPrereqsParallel(t, input, expoutput)
 }
 
@@ -51,11 +51,11 @@ func TestTouching(t *testing.T) {
 	input[3].end = 123
 	input[4].start = 123
 	input[4].end = 2102031928
-	
+
 	var expoutput = make([]TimeRange, 1)
 	expoutput[0].start = input[0].start
-	expoutput[0].end = input[len(input) - 1].end
-	
+	expoutput[0].end = input[len(input)-1].end
+
 	testExpandPrereqsParallel(t, input, expoutput)
 }
 
@@ -71,13 +71,13 @@ func TestTouchingSeparate(t *testing.T) {
 	input[3].end = 123
 	input[4].start = 123
 	input[4].end = 2102031928
-	
+
 	var expoutput = make([]TimeRange, 2)
 	expoutput[0].start = input[0].start
 	expoutput[0].end = input[1].end
 	expoutput[1].start = input[2].start
-	expoutput[1].end = input[len(input) - 1].end
-	
+	expoutput[1].end = input[len(input)-1].end
+
 	testExpandPrereqsParallel(t, input, expoutput)
 }
 
@@ -93,13 +93,13 @@ func TestOverlap(t *testing.T) {
 	input[3].end = 2102031927
 	input[4].start = 123
 	input[4].end = 2102031928
-	
+
 	var expoutput = make([]TimeRange, 2)
 	expoutput[0].start = input[0].start
 	expoutput[0].end = input[1].end
 	expoutput[1].start = input[2].start
-	expoutput[1].end = input[len(input) - 1].end
-	
+	expoutput[1].end = input[len(input)-1].end
+
 	testExpandPrereqsParallel(t, input, expoutput)
 }
 
@@ -115,12 +115,12 @@ func TestTouchOverlapSubsume(t *testing.T) {
 	input[3].end = 2102031927
 	input[4].start = 123
 	input[4].end = 2102031928
-	
+
 	var expoutput = make([]TimeRange, 2)
 	expoutput[0].start = input[0].start
 	expoutput[0].end = input[1].end
 	expoutput[1].start = input[2].start
-	expoutput[1].end = input[len(input) - 1].end
-	
+	expoutput[1].end = input[len(input)-1].end
+
 	testExpandPrereqsParallel(t, input, expoutput)
 }
