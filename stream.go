@@ -3,8 +3,8 @@ package distil
 import (
 	"fmt"
 
-	"github.com/pborman/uuid"
 	btrdb "github.com/SoftwareDefinedBuildings/btrdb-go"
+	"github.com/pborman/uuid"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -30,7 +30,7 @@ func findAssertOne(col *mgo.Collection, key string, value string) bson.M {
 	}
 
 	var result bson.M
-	err = q.One(result)
+	err = q.One(&result)
 	if err != nil {
 		panic(err)
 	}
@@ -46,7 +46,7 @@ func (ds *DISTIL) StreamFromUUID(id uuid.UUID) *Stream {
 	if !ok {
 		panic(fmt.Sprintf("Document for UUID %s is missing required field 'Path'", id.String()))
 	}
-	
+
 	path, ok := pathint.(string)
 	if !ok {
 		panic(fmt.Sprintf("Value of Path for stream with UUID %s is not a string", id.String()))
@@ -72,14 +72,14 @@ func (ds *DISTIL) StreamFromPath(path string) *Stream {
 	if !ok {
 		panic(fmt.Sprintf("Document for Path %s is missing required field 'uuid'", path))
 	}
-	
+
 	uuidstr, ok := uuidstrint.(string)
 	if !ok {
 		panic(fmt.Sprintf("Value of UUID for stream with Path %s is not a string", path))
 	}
 
 	var id = uuid.Parse(uuidstr)
-	if id != nil {
+	if id == nil {
 		panic(fmt.Sprintf("Document for Path %s has invalid UUID %s", path, uuidstr))
 	}
 
@@ -171,7 +171,7 @@ func (s *Stream) SetTagVersion(uniqueName string, version uint64) {
 			fmt.Sprintf("distil.%s", uniqueName): version,
 		},
 	}
-	
+
 	var err error = s.ds.col.Insert(metadata)
 	if err != nil {
 		panic(err)
@@ -188,49 +188,49 @@ func (s *Stream) ChangesBetween(oldversion uint64, newversion uint64) []TimeRang
 	var errc chan string
 	var erri error
 	var errstr string
-	
+
 	trc, _, errc, erri = s.ds.bdb.QueryChangedRanges(s.id, oldversion, newversion, CHANGED_RANGE_RES)
 	if erri != nil {
 		panic(erri)
 	}
 	for tr = range trc {
-		trslice = append(trslice, TimeRange{ Start: tr.StartTime, End: tr.EndTime })
+		trslice = append(trslice, TimeRange{Start: tr.StartTime, End: tr.EndTime})
 	}
-	
-	errstr = <- errc
+
+	errstr = <-errc
 	if errstr != "" {
 		panic(errstr)
 	}
-	
+
 	return trslice
 }
 
 func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version uint64) []Point {
 	//feed the resulting channel through rebase.Process and turn it into
 	//a []Point slice
-	var ptslice = make([]Point, 0, (r.End - r.Start) << 7)
-	
+	var ptslice = make([]Point, 0, (r.End-r.Start)<<7)
+
 	var pt btrdb.StandardValue
 	var ptc chan btrdb.StandardValue
 	var errc chan string
 	var erri error
 	var errstr string
-	
+
 	ptc, _, errc, erri = s.ds.bdb.QueryStandardValues(s.id, r.Start, r.End, version)
 	if erri != nil {
 		panic(erri)
 	}
-	
+
 	var rbc chan btrdb.StandardValue = rebase.Process(r.Start, r.End, ptc)
-	errstr = <- errc // Maybe I should change this into a nonblocking read() using select?
+	errstr = <-errc // Maybe I should change this into a nonblocking read() using select?
 	if errstr != "" {
 		panic(erri)
 	}
-	
+
 	for pt = range rbc {
-		ptslice = append(ptslice, Point{ T: pt.Time, V: pt.Value })
+		ptslice = append(ptslice, Point{T: pt.Time, V: pt.Value})
 	}
-	
+
 	return ptslice
 }
 
@@ -238,13 +238,13 @@ func (s *Stream) EraseRange(r TimeRange) {
 	var statc chan string
 	var stat string
 	var erri error
-	
+
 	statc, erri = s.ds.bdb.DeleteValues(s.id, r.Start, r.End)
 	if erri != nil {
 		panic(erri)
 	}
-	
-	stat = <- statc
+
+	stat = <-statc
 	if stat != "ok" {
 		panic(fmt.Sprintf("Status code from BTrDB on Delete is %s", stat))
 	}
@@ -254,18 +254,18 @@ func (s *Stream) WritePoints(p []Point) {
 	var statc chan string
 	var stat string
 	var erri error
-	
+
 	var sv = make([]btrdb.StandardValue, len(p))
 	for i, point := range p {
-		sv[i] = btrdb.StandardValue{ Time: point.T, Value: point.V }
+		sv[i] = btrdb.StandardValue{Time: point.T, Value: point.V}
 	}
-	
+
 	statc, erri = s.ds.bdb.InsertValues(s.id, sv, false)
 	if erri != nil {
 		panic(erri)
 	}
-	
-	stat = <- statc
+
+	stat = <-statc
 	if stat != "ok" {
 		panic(fmt.Sprintf("Status code from BTrDB on Insert is %s", stat))
 	}
@@ -277,18 +277,18 @@ func (s *Stream) CurrentVersion() uint64 {
 	var errstr string
 	var errc chan string
 	var erri error
-	
-	vrc, errc, erri = s.ds.bdb.QueryVersion([]uuid.UUID{ s.id })
+
+	vrc, errc, erri = s.ds.bdb.QueryVersion([]uuid.UUID{s.id})
 	if erri != nil {
 		panic(erri)
 	}
-	
-	vr = <- vrc
-	errstr = <- errc
-	
+
+	vr = <-vrc
+	errstr = <-errc
+
 	if errstr != "" {
 		panic(fmt.Sprintf("Status from BTrDB on Version Query is %s", errstr))
 	}
-	
+
 	return vr
 }

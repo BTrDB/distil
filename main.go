@@ -11,7 +11,7 @@ import (
 )
 
 const DBNAME = "qdf"
-const CNAME = "metadata"
+const CNAME = "metadata2"
 const MaxVersionSet = 1000
 
 func chk(e error) {
@@ -81,6 +81,8 @@ func (ds *DISTIL) RegisterDistillate(r *Registration) {
 		d:   r.Instance,
 		reg: *r,
 	}
+	h.inputs = ds.StreamsFromPaths(h.reg.InputPaths)
+	h.outputs = ds.MakeOrGetByPaths(h.reg.OutputPaths)
 	ds.distillates = append(ds.distillates, &h)
 }
 
@@ -103,6 +105,7 @@ func (h *handle) ProcessLoop() {
 		for idx, in := range h.inputs {
 			versions[idx] = in.TagVersion(h.reg.UniqueName)
 			headversions[idx] = in.CurrentVersion()
+			fmt.Println("we got tag/head", versions[idx], headversions[idx])
 			if headversions[idx]-versions[idx] > MaxVersionSet {
 				headversions[idx] = versions[idx] + MaxVersionSet
 			}
