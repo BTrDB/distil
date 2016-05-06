@@ -41,6 +41,10 @@ func findAssertOne(col *mgo.Collection, key string, value string) bson.M {
 func (ds *DISTIL) StreamFromUUID(id uuid.UUID) *Stream {
 	//return nil if it doesn't exist
 	var result bson.M = findAssertOne(ds.col, "uuid", id.String())
+	
+	if result == nil {
+		return nil
+	}
 
 	pathint, ok := result["Path"]
 	if !ok {
@@ -67,6 +71,10 @@ func (ds *DISTIL) StreamsFromUUIDs(ids []uuid.UUID) []*Stream {
 func (ds *DISTIL) StreamFromPath(path string) *Stream {
 	//Resolve path to uuid and call stream from uuid
 	var result bson.M = findAssertOne(ds.col, "Path", path)
+	
+	if result == nil {
+		return nil
+	}
 
 	uuidstrint, ok := result["uuid"]
 	if !ok {
@@ -145,6 +153,9 @@ func (s *Stream) TagVersion(uniqueName string) uint64 {
 	//and parse it as int
 	//panic on any error
 	var result bson.M = findAssertOne(s.ds.col, "Path", s.path)
+	if result == nil {
+		panic(fmt.Sprintf("Could not find document for Path %s", s.path))
+	}
 
 	distilint, ok := result["distil"]
 	if !ok {
