@@ -12,7 +12,7 @@ import (
 
 const DBNAME = "qdf"
 const CNAME = "metadata2"
-const MaxVersionSet = 1000
+const MaxVersionSet = 100
 
 func chk(e error) {
 	if e != nil {
@@ -105,7 +105,6 @@ func (h *handle) ProcessLoop() {
 		for idx, in := range h.inputs {
 			versions[idx] = in.TagVersion(h.reg.UniqueName)
 			headversions[idx] = in.CurrentVersion()
-			fmt.Println("we got tag/head", versions[idx], headversions[idx])
 			if headversions[idx]-versions[idx] > MaxVersionSet {
 				headversions[idx] = versions[idx] + MaxVersionSet
 			}
@@ -123,14 +122,13 @@ func (h *handle) ProcessLoop() {
 		//Find the changed ranges
 		chranges := make([]TimeRange, 0, 20)
 		for idx, in := range h.inputs {
+			fmt.Println("INF Adding range for versions", versions[idx], "to", headversions[idx])
 			chranges = append(chranges, in.ChangesBetween(versions[idx], headversions[idx])...)
 		}
-
 		lastt := int64(0)
 
 		//Add merge
 		merged_ranges := expandPrereqsParallel(chranges)
-
 		for _, r := range merged_ranges {
 			if r.End > lastt {
 				lastt = r.End
@@ -143,8 +141,12 @@ func (h *handle) ProcessLoop() {
 			}
 			originalStartTime := r.Start
 			r.Start -= h.d.LeadNanos()
+			subthen := time.Now()
+			fmt.Printf("INF Querying inputs for range at %s\n", time.Unix(0, r.Start))
+			total := 0
 			for idx, in := range h.inputs {
 				is.samples[idx] = in.GetPoints(r, h.d.Rebase(), headversions[idx])
+				total += len(is.samples[idx])
 				//Find the index of the original start of range
 				is.startIndexes[idx] = len(is.samples[idx])
 				for search := 0; search < len(is.samples[idx]); search++ {
@@ -154,6 +156,7 @@ func (h *handle) ProcessLoop() {
 					}
 				}
 			}
+			fmt.Printf("INF Query finished (%d points, %d seconds)\n", total, time.Now().Sub(subthen)/time.Second)
 			//Create the output data blocks
 			allocHint := 5000
 			for _, in := range is.samples {
@@ -187,6 +190,20 @@ func (h *handle) ProcessLoop() {
 		fmt.Printf("FIN %s \n  >> latest at %s\n  >> took %.2f seconds to compute\n",
 			h.reg.UniqueName, time.Unix(0, lastt), float64(time.Now().Sub(then)/time.Millisecond)/1000.0)
 	}
+}
+
+func FromEnvVars() (string, string) {
+	btrdbAddr := os.Getenv("DISTIL_BTRDB_ADDR")
+	mongoAddr := os.Getenv("DISTIL_MONGO_ADDR")
+	if btrdbAddr == "" {
+		fmt.Println("WARN: ENV $DISTIL_BTRDB_ADDR not set, using 'localhost:4410'")
+		btrdbAddr = "localhost:4410"
+	}
+	if mongoAddr == "" {
+		fmt.Println("WARNL: ENV $DISTIL_MONGO_ADDR not set, using 'localhost:27017'")
+		mongoAddr = "localhost:27017"
+	}
+	return btrdbAddr, mongoAddr
 }
 
 type InputSet struct {

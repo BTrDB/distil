@@ -2,6 +2,7 @@ package distil
 
 import (
 	"fmt"
+	"strings"
 
 	btrdb "github.com/SoftwareDefinedBuildings/btrdb-go"
 	"github.com/pborman/uuid"
@@ -41,7 +42,7 @@ func findAssertOne(col *mgo.Collection, key string, value string) bson.M {
 func (ds *DISTIL) StreamFromUUID(id uuid.UUID) *Stream {
 	//return nil if it doesn't exist
 	var result bson.M = findAssertOne(ds.col, "uuid", id.String())
-	
+
 	if result == nil {
 		return nil
 	}
@@ -59,6 +60,19 @@ func (ds *DISTIL) StreamFromUUID(id uuid.UUID) *Stream {
 	return &Stream{ds: ds, id: id, path: path}
 }
 
+func (ds *DISTIL) ListUpmuPaths() []string {
+	q := ds.col.Find(bson.M{"Metadata.SourceName": "uPMU", "Path": bson.M{"$regex": ".*L1MAG"}})
+	rv := []string{}
+	iter := q.Iter()
+	var ob struct {
+		Path string `bson:"Path"`
+	}
+	for iter.Next(&ob) {
+		rv = append(rv, strings.TrimSuffix(ob.Path, "/L1MAG"))
+	}
+	return rv
+}
+
 func (ds *DISTIL) StreamsFromUUIDs(ids []uuid.UUID) []*Stream {
 	//loop over above
 	var streams = make([]*Stream, len(ids))
@@ -71,7 +85,7 @@ func (ds *DISTIL) StreamsFromUUIDs(ids []uuid.UUID) []*Stream {
 func (ds *DISTIL) StreamFromPath(path string) *Stream {
 	//Resolve path to uuid and call stream from uuid
 	var result bson.M = findAssertOne(ds.col, "Path", path)
-	
+
 	if result == nil {
 		return nil
 	}
@@ -127,9 +141,10 @@ func (ds *DISTIL) MakeOrGetByPath(path string) *Stream {
 			"UnitofMeasure": "Unspecified",
 			"UnitofTime":    "ns",
 			"ReadingType":   "double",
-			"SourceName":    "BTS",
 		},
-		"Metadata": bson.M{},
+		"Metadata": bson.M{
+			"SourceName": "DISTIL",
+		},
 	}
 
 	var err error = ds.col.Insert(metadata)
@@ -169,11 +184,11 @@ func (s *Stream) TagVersion(uniqueName string) uint64 {
 	if !ok {
 		return 1
 	}
-	val, ok := valint.(uint64)
+	val, ok := valint.(int64)
 	if !ok {
 		panic(fmt.Sprintf("Value for TagVersion of distillate %s for stream with Path %s is not an int64", uniqueName, s.path))
 	}
-	return val
+	return uint64(val)
 }
 
 func (s *Stream) SetTagVersion(uniqueName string, version uint64) {
@@ -222,7 +237,7 @@ func (s *Stream) ChangesBetween(oldversion uint64, newversion uint64) []TimeRang
 func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version uint64) []Point {
 	//feed the resulting channel through rebase.Process and turn it into
 	//a []Point slice
-	var ptslice = make([]Point, 0, (r.End - r.Start) * 130 / 1000000000)
+	var ptslice = make([]Point, 0, (r.End-r.Start)*130/1000000000)
 
 	var pt btrdb.StandardValue
 	var ptc chan btrdb.StandardValue
@@ -240,7 +255,7 @@ func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version uint64) []Point 
 	for pt = range rbc {
 		ptslice = append(ptslice, Point{T: pt.Time, V: pt.Value})
 	}
-	
+
 	errstr = <-errc // Maybe I should change this into a nonblocking read() using select?
 	if errstr != "" {
 		panic(erri)
