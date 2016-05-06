@@ -97,8 +97,8 @@ func (h *handle) ProcessLoop() {
 	for {
 		then := time.Now()
 
-		versions := make([]int64, len(h.inputs))
-		headversions := make([]int64, len(h.inputs))
+		versions := make([]uint64, len(h.inputs))
+		headversions := make([]uint64, len(h.inputs))
 		some := false
 		for idx, in := range h.inputs {
 			versions[idx] = in.TagVersion(h.reg.UniqueName)

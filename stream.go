@@ -4,10 +4,13 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
+	btrdb "github.com/SoftwareDefinedBuildings/btrdb-go"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
+
+const CHANGED_RANGE_RES uint8 = 38
 
 type Stream struct {
 	ds   *DISTIL
@@ -15,8 +18,8 @@ type Stream struct {
 	path string
 }
 
-func findAssertOne(col *mgo.Collection, key string, val string) bson.M {
-	var q *mgo.Query = ds.col.Find(bson.M{key: value})
+func findAssertOne(col *mgo.Collection, key string, value string) bson.M {
+	var q *mgo.Query = col.Find(bson.M{key: value})
 	c, err := q.Count()
 	if err != nil {
 		panic(err)
@@ -32,17 +35,21 @@ func findAssertOne(col *mgo.Collection, key string, val string) bson.M {
 		panic(err)
 	}
 
-	return value
+	return result
 }
 
 func (ds *DISTIL) StreamFromUUID(id uuid.UUID) *Stream {
-	//TODO sam
 	//return nil if it doesn't exist
 	var result bson.M = findAssertOne(ds.col, "uuid", id.String())
 
-	path, ok := result["Path"]
+	pathint, ok := result["Path"]
 	if !ok {
 		panic(fmt.Sprintf("Document for UUID %s is missing required field 'Path'", id.String()))
+	}
+	
+	path, ok := pathint.(string)
+	if !ok {
+		panic(fmt.Sprintf("Value of Path for stream with UUID %s is not a string", id.String()))
 	}
 
 	return &Stream{ds: ds, id: id, path: path}
@@ -61,9 +68,14 @@ func (ds *DISTIL) StreamFromPath(path string) *Stream {
 	//Resolve path to uuid and call stream from uuid
 	var result bson.M = findAssertOne(ds.col, "Path", path)
 
-	uuidstr, ok := result["uuid"]
+	uuidstrint, ok := result["uuid"]
 	if !ok {
 		panic(fmt.Sprintf("Document for Path %s is missing required field 'uuid'", path))
+	}
+	
+	uuidstr, ok := uuidstrint.(string)
+	if !ok {
+		panic(fmt.Sprintf("Value of UUID for stream with Path %s is not a string", path))
 	}
 
 	var id = uuid.Parse(uuidstr)
@@ -89,13 +101,12 @@ func (ds *DISTIL) StreamsFromPaths(paths []string) []*Stream {
 // and returns it.
 /* NOTE: This function should NOT be called concurrently with the same PATH. */
 func (ds *DISTIL) MakeOrGetByPath(path string) *Stream {
-	//TODO sam
 	//if stream does not exist then create metadata for
 	//the stream
 	//see https://github.com/immesys/distil-spark/blob/master/src/scala/io/btrdb/distil/dsl.scala#L173
 	//and create the metadata a bit like that (assu)
 
-	var stream *stream = StreamFromPath(path)
+	var stream *Stream = ds.StreamFromPath(path)
 	if stream != nil {
 		return stream
 	}
@@ -128,8 +139,7 @@ func (ds *DISTIL) MakeOrGetByPaths(paths []string) []*Stream {
 	return streams
 }
 
-func (s *Stream) TagVersion(uniqueName string) int64 {
-	//TODO sam
+func (s *Stream) TagVersion(uniqueName string) uint64 {
 	//Get the metadata key from this stream
 	// distil.<uniquename>
 	//and parse it as int
@@ -138,57 +148,153 @@ func (s *Stream) TagVersion(uniqueName string) int64 {
 
 	distilint, ok := result["distil"]
 	if !ok {
-		panic(fmt.Sprintf("Document for Path %s is missing required field 'distil'", s.Path))
+		panic(fmt.Sprintf("Document for Path %s is missing required field 'distil'", s.path))
 	}
 	distil, ok := distilint.(bson.M)
 	if !ok {
-		panic(fmt.Sprintf("Document for Path %s has 'distil' key not mapped object", s.Path))
+		panic(fmt.Sprintf("Document for Path %s has 'distil' key not mapped object", s.path))
 	}
 	valint, ok := distil[uniqueName]
 	if !ok {
-		panic(fmt.Sprintf("Document for distillate %s not found for stream with Path %s", uniqueName, s.Path))
+		panic(fmt.Sprintf("Document for distillate %s not found for stream with Path %s", uniqueName, s.path))
 	}
-	val, ok := valint.(int64)
+	val, ok := valint.(uint64)
 	if !ok {
-		panic(fmt.Sprintf("Value for TagVersion of distillate %s for stream with Path %s is not an int64", uniquename, s.Path))
+		panic(fmt.Sprintf("Value for TagVersion of distillate %s for stream with Path %s is not an int64", uniqueName, s.path))
 	}
 	return val
 }
 
-func (s *Stream) SetTagVersion(uniqueName string, version int64) {
-	//TODO sam set as above
+func (s *Stream) SetTagVersion(uniqueName string, version uint64) {
 	var metadata = bson.M{
 		"$set": bson.M{
 			fmt.Sprintf("distil.%s", uniqueName): version,
 		},
 	}
+	
+	var err error = s.ds.col.Insert(metadata)
+	if err != nil {
+		panic(err)
+	}
 
 }
 
-func (s *Stream) ChangesSince(version int64) []TimeRange {
-	//TODO sam
+func (s *Stream) ChangesBetween(oldversion uint64, newversion uint64) []TimeRange {
 	//Do the btrdb query, read the results from the chan into a slice
 	//panic on any error
+	var trslice = make([]TimeRange, 0, 20)
+	var trc chan btrdb.TimeRange
+	var tr btrdb.TimeRange
+	var errc chan string
+	var erri error
+	var errstr string
+	var ok bool
+	trc, _, errc, erri = s.ds.bdb.QueryChangedRanges(s.id, oldversion, newversion, CHANGED_RANGE_RES)
+	if erri != nil {
+		panic(erri)
+	}
+	for {
+		tr, ok = <- trc
+		if ok {
+			break
+		}
+		trslice = append(trslice, TimeRange{ Start: tr.StartTime, End: tr.EndTime })
+	}
+	
+	errstr = <- errc
+	if errstr != "" {
+		panic(errstr)
+	}
+	
+	return trslice
 }
 
-func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version int64) []Point {
-	//TODO sam
+func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version uint64) []Point {
 	//feed the resulting channel through rebase.Process and turn it into
 	//a []Point slice
+	var ptslice = make([]Point, 0, (r.End - r.Start) << 7)
+	
+	var pt btrdb.StandardValue
+	var ptc chan btrdb.StandardValue
+	var errc chan string
+	var erri error
+	var errstr string
+	var ok bool
+	ptc, _, errc, erri = s.ds.bdb.QueryStandardValues(s.id, r.Start, r.End, version)
+	if erri != nil {
+		panic(erri)
+	}
+	
+	var rbc chan btrdb.StandardValue = rebase.Process(r.Start, r.End, ptc)
+	errstr = <- errc // Maybe I should change this into a nonblocking read() using select?
+	if errstr != "" {
+		panic(erri)
+	}
+	
+	for {
+		pt, ok = <- rbc
+		if ok {
+			return ptslice
+		}
+		ptslice = append(ptslice, Point{ T: pt.Time, V: pt.Value })
+	}
 }
 
 func (s *Stream) EraseRange(r TimeRange) {
-	//TODO sam
+	var statc chan string
+	var stat string
+	var erri error
+	
+	statc, erri = s.ds.bdb.DeleteValues(s.id, r.Start, r.End)
+	if erri != nil {
+		panic(erri)
+	}
+	
+	stat = <- statc
+	if stat != "ok" {
+		panic(fmt.Sprintf("Status code from BTrDB on Delete is %s", stat))
+	}
 }
 
 func (s *Stream) WritePoints(p []Point) {
-	//TODO sam
+	var statc chan string
+	var stat string
+	var erri error
+	
+	var sv = make([]btrdb.StandardValue, len(p))
+	for i, point := range p {
+		sv[i] = btrdb.StandardValue{ Time: point.T, Value: point.V }
+	}
+	
+	statc, erri = s.ds.bdb.InsertValues(s.id, sv, false)
+	if erri != nil {
+		panic(erri)
+	}
+	
+	stat = <- statc
+	if stat != "ok" {
+		panic(fmt.Sprintf("Status code from BTrDB on Insert is %s", stat))
+	}
 }
 
-func (s *Stream) CurrentVersion() int64 {
-	//TODO sam
-}
-
-func (s *Stream) ChangesBetween(fromV, toV int64) []TimeRange {
-	//TODO sam
+func (s *Stream) CurrentVersion() uint64 {
+	var vr uint64
+	var vrc chan uint64
+	var errstr string
+	var errc chan string
+	var erri error
+	
+	vrc, errc, erri = s.ds.bdb.QueryVersion([]uuid.UUID{ s.id })
+	if erri != nil {
+		panic(erri)
+	}
+	
+	vr = <- vrc
+	errstr = <- errc
+	
+	if errstr != "" {
+		panic(fmt.Sprintf("Status from BTrDB on Version Query is %s", errstr))
+	}
+	
+	return vr
 }
