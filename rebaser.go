@@ -28,6 +28,10 @@ type padSnapRebaser struct {
 	freq int64
 }
 
+func RebasePadSnap(freq int64) Rebaser {
+	return &padSnapRebaser{ freq: freq }
+}
+
 func (rb *padSnapRebaser) Process(start, end int64, input chan btrdb.StandardValue) chan btrdb.StandardValue {
 	rv := make(chan btrdb.StandardValue, 1000)
 	const NANO = int64(1000000000)
