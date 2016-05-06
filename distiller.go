@@ -67,7 +67,3 @@ func expandPrereqsParallel(changedRanges []TimeRange) []TimeRange {
 	
 	return combinedRanges
 }
-
-func main() {
-	fmt.Println("Hello, world!")
-}
