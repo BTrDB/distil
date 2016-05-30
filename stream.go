@@ -94,8 +94,13 @@ func (ds *DISTIL) ListExistingUpmuPaths() []string {
 	}
 	for iter.Next(&ob) {
 		uu := uuid.Parse(ob.Id)
-		fmt.Println("uu is", uu)
-		if !ds.StreamFromUUID(uu).Exists() {
+		ss := ds.StreamFromUUID(uu)
+		if ss == nil {
+			fmt.Println("Warning, bad stream: ", ob.Path)
+			fmt.Println("UUID ", uu)
+			continue
+		}
+		if ss == nil || !ss.Exists() {
 			fmt.Println("INF Skipping empty stream:", ob.Path)
 			continue
 		}
@@ -312,24 +317,35 @@ func (s *Stream) EraseRange(r TimeRange) {
 }
 
 // Write the given points to the stream
-func (s *Stream) WritePoints(p []Point) {
-	var statc chan string
-	var stat string
-	var erri error
+func (s *Stream) WritePoints(pts []Point) {
+	idx := 0
+	chunksz := 8000
+	for idx < len(pts) {
+		end := idx + chunksz
+		if end > len(pts) {
+			end = len(pts)
+		}
+		p := pts[idx:end]
+		idx += chunksz
 
-	var sv = make([]btrdb.StandardValue, len(p))
-	for i, point := range p {
-		sv[i] = btrdb.StandardValue{Time: point.T, Value: point.V}
-	}
+		var statc chan string
+		var stat string
+		var erri error
 
-	statc, erri = s.ds.bdb.InsertValues(s.id, sv, false)
-	if erri != nil {
-		panic(erri)
-	}
+		var sv = make([]btrdb.StandardValue, len(p))
+		for i, point := range p {
+			sv[i] = btrdb.StandardValue{Time: point.T, Value: point.V}
+		}
 
-	stat = <-statc
-	if stat != "ok" {
-		panic(fmt.Sprintf("Status code from BTrDB on Insert is %s", stat))
+		statc, erri = s.ds.bdb.InsertValues(s.id, sv, false)
+		if erri != nil {
+			panic(erri)
+		}
+
+		stat = <-statc
+		if stat != "ok" {
+			panic(fmt.Sprintf("Status code from BTrDB on Insert is %s", stat))
+		}
 	}
 }
 

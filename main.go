@@ -133,7 +133,7 @@ func (h *handle) ProcessLoop() {
 		//Find the changed ranges
 		chranges := make([]TimeRange, 0, 20)
 		for idx, in := range h.inputs {
-			fmt.Println("INF Adding range for versions", versions[idx], "to", headversions[idx])
+			fmt.Println("INF[", h.reg.UniqueName, "] Adding range for versions", versions[idx], "to", headversions[idx])
 			chranges = append(chranges, in.ChangesBetween(versions[idx], headversions[idx])...)
 		}
 		lastt := int64(0)
@@ -153,7 +153,7 @@ func (h *handle) ProcessLoop() {
 			originalStartTime := r.Start
 			r.Start -= h.d.LeadNanos()
 			subthen := time.Now()
-			fmt.Printf("INF Querying inputs for range at %s\n", time.Unix(0, r.Start))
+			fmt.Printf("INF[%s] Querying inputs for range at %s\n", h.reg.UniqueName, time.Unix(0, r.Start))
 			total := 0
 			for idx, in := range h.inputs {
 				is.samples[idx] = in.GetPoints(r, h.d.Rebase(), headversions[idx])
@@ -167,7 +167,7 @@ func (h *handle) ProcessLoop() {
 					}
 				}
 			}
-			fmt.Printf("INF Query finished (%d points, %d seconds)\n", total, time.Now().Sub(subthen)/time.Second)
+			fmt.Printf("INF[%s] Query finished (%d points, %d seconds)\n", h.reg.UniqueName, total, time.Now().Sub(subthen)/time.Second)
 			//Create the output data blocks
 			allocHint := 5000
 			for _, in := range is.samples {
@@ -185,6 +185,8 @@ func (h *handle) ProcessLoop() {
 
 			//Process
 			h.d.Process(&is, &os)
+
+			fmt.Printf("INF[%s] Process finished\n", h.reg.UniqueName)
 
 			//Write back the data
 			for idx, ostream := range h.outputs {
