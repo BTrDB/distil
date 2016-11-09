@@ -133,7 +133,7 @@ func (h *handle) ProcessLoop() {
 		//Find the changed ranges
 		chranges := make([]TimeRange, 0, 20)
 		for idx, in := range h.inputs {
-			fmt.Println("INF[", h.reg.UniqueName, "] Adding range for versions", versions[idx], "to", headversions[idx])
+			fmt.Printf("INF[%s] Adding range for versions %v to %v\n", h.reg.UniqueName, versions[idx], headversions[idx])
 			chranges = append(chranges, in.ChangesBetween(versions[idx], headversions[idx])...)
 		}
 		lastt := int64(0)
