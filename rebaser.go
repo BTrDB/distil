@@ -3,14 +3,14 @@ package distil
 import (
 	"math"
 
-	"github.com/SoftwareDefinedBuildings/btrdb-go"
+	btrdb "gopkg.in/btrdb.v4"
 )
 
 // This specifies an input data preprocessor. It may do anything, but is
 // typically used for rebasing input streams (removing duplicates and)
 // padding missing values
 type Rebaser interface {
-	Process(start, end int64, input chan btrdb.StandardValue) chan btrdb.StandardValue
+	Process(start, end int64, input chan btrdb.RawPoint) chan btrdb.RawPoint
 }
 
 // Return a rebaser that does not modify input data
@@ -20,7 +20,7 @@ func RebasePassthrough() Rebaser {
 
 type noRebase struct{}
 
-func (n *noRebase) Process(start, end int64, input chan btrdb.StandardValue) chan btrdb.StandardValue {
+func (n *noRebase) Process(start, end int64, input chan btrdb.RawPoint) chan btrdb.RawPoint {
 	return input
 }
 
@@ -29,11 +29,11 @@ type padSnapRebaser struct {
 }
 
 func RebasePadSnap(freq int64) Rebaser {
-	return &padSnapRebaser{ freq: freq }
+	return &padSnapRebaser{freq: freq}
 }
 
-func (rb *padSnapRebaser) Process(start, end int64, input chan btrdb.StandardValue) chan btrdb.StandardValue {
-	rv := make(chan btrdb.StandardValue, 1000)
+func (rb *padSnapRebaser) Process(start, end int64, input chan btrdb.RawPoint) chan btrdb.RawPoint {
+	rv := make(chan btrdb.RawPoint, 1000)
 	const NANO = int64(1000000000)
 	period := NANO / rb.freq
 	offset := period / 2
@@ -48,7 +48,7 @@ func (rb *padSnapRebaser) Process(start, end int64, input chan btrdb.StandardVal
 		subsec = cycle * period
 		*T = sec + subsec
 	}
-	discard := func(c chan btrdb.StandardValue) {
+	discard := func(c chan btrdb.RawPoint) {
 		for _ = range c {
 
 		}
@@ -69,7 +69,7 @@ func (rb *padSnapRebaser) Process(start, end int64, input chan btrdb.StandardVal
 			}
 			//If it is greater than what we expect, emit until we hit it or the end
 			for v.Time > expectedTime {
-				rv <- btrdb.StandardValue{Time: expectedTime, Value: math.NaN()}
+				rv <- btrdb.RawPoint{Time: expectedTime, Value: math.NaN()}
 				expectedTime += period
 				snap(&expectedTime)
 				if expectedTime >= end {
@@ -93,7 +93,7 @@ func (rb *padSnapRebaser) Process(start, end int64, input chan btrdb.StandardVal
 		}
 		//Now we ran out of input. Pad until output
 		for expectedTime < end {
-			rv <- btrdb.StandardValue{Time: expectedTime, Value: math.NaN()}
+			rv <- btrdb.RawPoint{Time: expectedTime, Value: math.NaN()}
 			expectedTime += period
 			snap(&expectedTime)
 		}

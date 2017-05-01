@@ -1,16 +1,13 @@
 package distil
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
 
-	btrdb "github.com/SoftwareDefinedBuildings/btrdb-go"
-	"gopkg.in/mgo.v2"
+	btrdb "gopkg.in/btrdb.v4"
 )
-
-const dbName = "qdf"
-const colName = "metadata"
 
 // This is the maximum number of versions that will be processed at once
 const MaxVersionSet = 100
@@ -23,24 +20,19 @@ func chk(e error) {
 }
 
 // DISTIL is a handle to the distil engine, including it's connections
-// to BTrDB and MongoDB
+// to BTrDB
 type DISTIL struct {
-	col         *mgo.Collection
-	bdb         *btrdb.BTrDBConnection
+	bdb         *btrdb.BTrDB
 	distillates []*handle
 }
 
 // NewDISTIL creates a DISTIL handle by connecting to the given
 // BTrDB and MongoDB addresses
-func NewDISTIL(btrdbaddr string, mongoaddr string) *DISTIL {
+func NewDISTIL() *DISTIL {
 	rv := DISTIL{}
 	// Init mongo
-	ses, err := mgo.Dial(mongoaddr)
-	chk(err)
-	db := ses.DB(dbName)
-	rv.col = db.C(colName)
-	// Init btrdb
-	rv.bdb, err = btrdb.NewBTrDBConnection(btrdbaddr)
+	var err error
+	rv.bdb, err = btrdb.Connect(context.Background(), btrdb.EndpointsFromEnv()...)
 	chk(err)
 	return &rv
 }
@@ -65,6 +57,7 @@ type Registration struct {
 	UniqueName  string
 	InputPaths  []string
 	OutputPaths []string
+	OutputUnits []string
 }
 
 type handle struct {
@@ -92,7 +85,7 @@ func (ds *DISTIL) RegisterDistillate(r *Registration) {
 	}
 	r.Instance.SetEngine(ds)
 	h.inputs = ds.StreamsFromPaths(h.reg.InputPaths)
-	h.outputs = ds.MakeOrGetByPaths(h.reg.OutputPaths)
+	h.outputs = ds.MakeOrGetByPaths(h.reg.OutputPaths, h.reg.OutputUnits)
 	ds.distillates = append(ds.distillates, &h)
 }
 
@@ -203,26 +196,6 @@ func (h *handle) ProcessLoop() {
 		fmt.Printf("FIN %s \n  >> latest at %s\n  >> took %.2f seconds to compute\n",
 			h.reg.UniqueName, time.Unix(0, lastt), float64(time.Now().Sub(then)/time.Millisecond)/1000.0)
 	}
-}
-
-// FromEnvVars is a utility function for use with NewDISTIL that will read
-// the BTrDB and Mongo addresses from the environment variables $DISTIL_BTRDB_ADDR
-// and $DISTIL_MONGO_ADDR respectively. For example:
-//
-//   distil.NewDISTIL(distil.FromEnvVars())
-//
-func FromEnvVars() (string, string) {
-	btrdbAddr := os.Getenv("DISTIL_BTRDB_ADDR")
-	mongoAddr := os.Getenv("DISTIL_MONGO_ADDR")
-	if btrdbAddr == "" {
-		fmt.Println("WARN: ENV $DISTIL_BTRDB_ADDR not set, using 'localhost:4410'")
-		btrdbAddr = "localhost:4410"
-	}
-	if mongoAddr == "" {
-		fmt.Println("WARNL: ENV $DISTIL_MONGO_ADDR not set, using 'localhost:27017'")
-		mongoAddr = "localhost:27017"
-	}
-	return btrdbAddr, mongoAddr
 }
 
 // An InputSet is passed to the Process method of a distillate, it contains
