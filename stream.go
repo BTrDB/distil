@@ -118,6 +118,9 @@ func (ds *DISTIL) StreamFromPath(path string) *Stream {
 		}
 		panic(fmt.Sprintf("Unexpected error getting stream: %v", err))
 	}
+	if len(streamz) == 0 {
+		return nil
+	}
 	if len(streamz) != 1 {
 		panic(fmt.Sprintf("Lookup of stream %q/%q yielded %d results", collection, name, len(streamz)))
 	}
