@@ -3,6 +3,7 @@ package distil
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -134,6 +135,10 @@ func (ds *DISTIL) StreamsFromPaths(paths []string) []*Stream {
 	var streams = make([]*Stream, len(paths))
 	for i, path := range paths {
 		streams[i] = ds.StreamFromPath(path)
+		if streams[i] == nil {
+			fmt.Printf("could not locate stream %q\n", path)
+			os.Exit(1)
+		}
 	}
 	return streams
 }
