@@ -3,7 +3,7 @@ package distil
 import (
 	"math"
 
-	btrdb "gopkg.in/btrdb/btrdb.v4"
+	btrdb "gopkg.in/BTrDB/btrdb.v4"
 )
 
 // This specifies an input data preprocessor. It may do anything, but is

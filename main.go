@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	btrdb "gopkg.in/btrdb/btrdb.v4"
+	btrdb "gopkg.in/BTrDB/btrdb.v4"
 )
 
 // This is the maximum number of versions that will be processed at once
