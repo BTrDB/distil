@@ -9,7 +9,7 @@ import (
 
 	"github.com/SoftwareDefinedBuildings/btrdb/bte"
 	"github.com/pborman/uuid"
-	btrdb "gopkg.in/btrdb.v4"
+	btrdb "gopkg.in/btrdb/btrdb.v4"
 )
 
 const changedRangeRes uint8 = 38
