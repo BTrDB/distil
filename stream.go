@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SoftwareDefinedBuildings/btrdb/bte"
+	"github.com/BTrDB/btrdb-server/bte"
 	"github.com/pborman/uuid"
 	btrdb "gopkg.in/btrdb/btrdb.v4"
 )
