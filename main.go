@@ -37,6 +37,10 @@ func NewDISTIL() *DISTIL {
 	return &rv
 }
 
+func (d *DISTIL) BTrDBConn() *btrdb.BTrDB {
+	return d.bdb
+}
+
 // func (ds *DISTIL) Resolve(path string) uuid.UUID {
 // 	//For sam to do
 // 	return uuid.NewUUID()
