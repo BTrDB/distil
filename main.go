@@ -130,6 +130,11 @@ func (h *handle) ProcessLoop() {
 		//Find the changed ranges
 		chranges := make([]TimeRange, 0, 20)
 		for idx, in := range h.inputs {
+			//10 is an uncreated stream, and BTrDB will return all of time as the
+			//resulting changed range. That causes problems
+			if headversions[idx] == 10 {
+				continue
+			}
 			fmt.Printf("INF[%s] Adding range for versions %v to %v\n", h.reg.UniqueName, versions[idx], headversions[idx])
 			chranges = append(chranges, in.ChangesBetween(versions[idx], headversions[idx])...)
 		}
