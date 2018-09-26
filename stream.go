@@ -234,7 +234,7 @@ func (s *Stream) ChangesBetween(oldversion uint64, newversion uint64) []TimeRang
 func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version uint64) []Point {
 	//feed the resulting channel through rebase.Process and turn it into
 	//a []Point slice
-	var ptslice = make([]Point, 0, (r.End-r.Start)*130/1000000000)
+	var ptslice = make([]Point, 0, 1000)
 
 	crv, _, cerr := s.s.RawValues(context.Background(), r.Start, r.End, version)
 
