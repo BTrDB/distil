@@ -235,7 +235,16 @@ func (s *Stream) GetPoints(r TimeRange, rebase Rebaser, version uint64) []Point 
 	//feed the resulting channel through rebase.Process and turn it into
 	//a []Point slice
 	var ptslice = make([]Point, 0, 1000)
-
+	if (r.End - r.Start) < 0 {
+		panic("range the wrong way round")
+	}
+	if r.End == r.Start {
+		fmt.Printf("warning, empty range")
+		return []Point{}
+	}
+	if r.End-r.Start > 30*24*60*60*1e9 {
+		panic("refusing to process range > 1 month")
+	}
 	crv, _, cerr := s.s.RawValues(context.Background(), r.Start, r.End, version)
 
 	rbc := rebase.Process(r.Start, r.End, crv)

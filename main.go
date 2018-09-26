@@ -155,7 +155,12 @@ func (h *handle) ProcessLoop() {
 			originalStartTime := r.Start
 			r.Start -= h.d.LeadNanos()
 			subthen := time.Now()
-			fmt.Printf("INF[%s] Querying inputs for range at %s\n", h.reg.UniqueName, time.Unix(0, r.Start))
+			mins := (r.End - r.Start) / int64(60*1e9)
+			if mins > 60*24*30 {
+				fmt.Printf("CRITICAL[%s] aborting this distillate run due to abnornal changed range\n", h.reg.UniqueName)
+				return
+			}
+			fmt.Printf("INF[%s] Querying inputs for range at %s (%d minutes)\n", h.reg.UniqueName, time.Unix(0, r.Start), mins)
 			total := 0
 			for idx, in := range h.inputs {
 				is.samples[idx] = in.GetPoints(r, h.d.Rebase(), headversions[idx])
