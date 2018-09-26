@@ -157,7 +157,7 @@ func (h *handle) ProcessLoop() {
 			subthen := time.Now()
 			mins := (r.End - r.Start) / int64(60*1e9)
 			if mins > 60*24*30 {
-				fmt.Printf("CRITICAL[%s] aborting this distillate run due to abnornal changed range\n", h.reg.UniqueName)
+				fmt.Printf("CRITICAL[%s] aborting this distillate run due to abnornal changed range (%d minutes)\n", h.reg.UniqueName, mins)
 				return
 			}
 			fmt.Printf("INF[%s] Querying inputs for range at %s (%d minutes)\n", h.reg.UniqueName, time.Unix(0, r.Start), mins)
