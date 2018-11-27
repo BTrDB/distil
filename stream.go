@@ -2,7 +2,6 @@ package distil
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
