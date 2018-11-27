@@ -3,7 +3,6 @@ package distil
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -130,17 +129,17 @@ func (ds *DISTIL) StreamFromPath(path string) *Stream {
 }
 
 // Obtain multiple streams based on paths
-func (ds *DISTIL) StreamsFromPaths(paths []string) []*Stream {
+func (ds *DISTIL) StreamsFromPaths(paths []string) ([]*Stream, error) {
 	//loop over StreamFromPath
 	var streams = make([]*Stream, len(paths))
 	for i, path := range paths {
 		streams[i] = ds.StreamFromPath(path)
 		if streams[i] == nil {
-			fmt.Printf("could not locate stream %q\n", path)
-			os.Exit(1)
+			fmt.Printf("WARN: could not locate stream (%s)\n", path)
+			return nil, fmt.Errorf("Stream not found (%s)", path)
 		}
 	}
-	return streams
+	return streams, nil
 }
 
 // This is the same as StreamFromPath, but if the path does not exist, it will
