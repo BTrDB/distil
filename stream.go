@@ -137,7 +137,7 @@ func (ds *DISTIL) StreamsFromPaths(paths []string) ([]*Stream, error) {
 		streams[i] = ds.StreamFromPath(path)
 		if streams[i] == nil {
 			fmt.Printf("WARN: could not locate stream (%s)\n", path)
-			return nil, errors.New(fmt.Sprintf("Stream not found (%s)", path))
+			return nil, fmt.Errorf("Stream not found (%s)", path)
 		}
 	}
 	return streams, nil
