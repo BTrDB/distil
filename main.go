@@ -83,12 +83,18 @@ func (ds *DISTIL) RegisterDistillate(r *Registration) {
 		fmt.Println("Aborting. Cannot register a distillate with no Instance")
 		os.Exit(1)
 	}
+	inputs, err := ds.StreamsFromPaths(r.InputPaths)
+	if err != nil {
+		fmt.Println("WARN: Registration ignored.  One or more streams not found.\n")
+		return
+	}
+
 	h := handle{
 		d:   r.Instance,
 		reg: *r,
 	}
 	r.Instance.SetEngine(ds)
-	h.inputs = ds.StreamsFromPaths(h.reg.InputPaths)
+	h.inputs = inputs
 	h.outputs = ds.MakeOrGetByPaths(h.reg.OutputPaths, h.reg.OutputUnits)
 	ds.distillates = append(ds.distillates, &h)
 }
