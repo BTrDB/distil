@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	btrdb "gopkg.in/BTrDB/btrdb.v4"
@@ -41,19 +42,6 @@ func (d *DISTIL) BTrDBConn() *btrdb.BTrDB {
 	return d.bdb
 }
 
-// func (ds *DISTIL) Resolve(path string) uuid.UUID {
-// 	//For sam to do
-// 	return uuid.NewUUID()
-// }
-//
-// func (ds *DISTIL) ResolveAll(paths []string) []uuid.UUID {
-// 	rv := make([]uuid.UUID, len(paths))
-// 	for i := 0; i < len(rv); i++ {
-// 		rv[i] = ds.Resolve(paths[i])
-// 	}
-// 	return rv
-// }
-
 // Registration is a handle to a specific instance of a distillate, along
 // with the information required to prepare it it
 type Registration struct {
@@ -85,7 +73,7 @@ func (ds *DISTIL) RegisterDistillate(r *Registration) {
 	}
 	inputs, err := ds.StreamsFromPaths(r.InputPaths)
 	if err != nil {
-		fmt.Println("WARN: Registration ignored.  One or more streams not found.\n")
+		fmt.Println("WARN: Registration ignored.  One or more streams not found.")
 		return
 	}
 
@@ -101,120 +89,152 @@ func (ds *DISTIL) RegisterDistillate(r *Registration) {
 
 // StartEngine begins processing distillates. It does not return
 func (ds *DISTIL) StartEngine() {
+	workers := 50
+	if os.Getenv("DISTIL_WORKERS") != "" {
+		arg, err := strconv.ParseInt(os.Getenv("DISTIL_WORKERS"), 10, 64)
+		if err != nil {
+			fmt.Printf("ERR: could not parse DISTIL_WORKERS: %v\n", err)
+			os.Exit(1)
+		}
+		workers = int(arg)
+	}
+	workerchan := make(chan struct{}, workers)
+	for i := 0; i < workers; i++ {
+		workerchan <- struct{}{}
+	}
 	for _, h := range ds.distillates {
-		go h.ProcessLoop()
+		go h.ProcessLoop(workerchan)
 	}
 	for {
 		time.Sleep(10 * time.Second)
 	}
 }
 
-func (h *handle) ProcessLoop() {
+type IterationResult int
+
+const ProcessedData IterationResult = 1
+const NoData IterationResult = 2
+const Abort IterationResult = 3
+
+func (h *handle) processIteration() IterationResult {
+	then := time.Now()
+
+	versions := make([]uint64, len(h.inputs))
+	headversions := make([]uint64, len(h.inputs))
+	some := false
+	for idx, in := range h.inputs {
+		versions[idx] = in.TagVersion(h.reg.UniqueName)
+		headversions[idx] = in.CurrentVersion()
+		if headversions[idx]-versions[idx] > MaxVersionSet {
+			headversions[idx] = versions[idx] + MaxVersionSet
+		}
+		if headversions[idx] != versions[idx] {
+			some = true
+		}
+	}
+
+	if !some {
+		fmt.Printf("NOP %s \n", h.reg.UniqueName)
+		return NoData
+	}
+
+	//Find the changed ranges
+	chranges := make([]TimeRange, 0, 20)
+	for idx, in := range h.inputs {
+		//10 is an uncreated stream, and BTrDB will return all of time as the
+		//resulting changed range. That causes problems
+		if headversions[idx] == 10 {
+			return NoData
+		}
+		fmt.Printf("INF[%s] Adding range for versions %v to %v\n", h.reg.UniqueName, versions[idx], headversions[idx])
+		chranges = append(chranges, in.ChangesBetween(versions[idx], headversions[idx])...)
+	}
+	lastt := int64(0)
+
+	//Add merge
+	merged_ranges := expandPrereqsParallel(chranges)
+	for _, r := range merged_ranges {
+		if r.End > lastt {
+			lastt = r.End
+		}
+		//Query the changed data and make blocks
+		is := InputSet{
+			startIndexes: make([]int, len(h.inputs)),
+			samples:      make([][]Point, len(h.inputs)),
+			tr:           r,
+		}
+		originalStartTime := r.Start
+		r.Start -= h.d.LeadNanos()
+		subthen := time.Now()
+		mins := (r.End - r.Start) / int64(60*1e9)
+		if mins > 60*24*30 {
+			fmt.Printf("CRITICAL[%s] aborting this distillate run due to abnormal changed range (%d minutes)\n", h.reg.UniqueName, mins)
+			return Abort
+		}
+		fmt.Printf("INF[%s] Querying inputs for range at %s (%d minutes)\n", h.reg.UniqueName, time.Unix(0, r.Start), mins)
+		total := 0
+		for idx, in := range h.inputs {
+			is.samples[idx] = in.GetPoints(r, h.d.Rebase(), headversions[idx])
+			total += len(is.samples[idx])
+			//Find the index of the original start of range
+			is.startIndexes[idx] = len(is.samples[idx])
+			for search := 0; search < len(is.samples[idx]); search++ {
+				if is.samples[idx][search].T >= originalStartTime {
+					is.startIndexes[idx] = search
+					break
+				}
+			}
+		}
+		fmt.Printf("INF[%s] Query finished (%d points, %d seconds)\n", h.reg.UniqueName, total, time.Now().Sub(subthen)/time.Second)
+		//Create the output data blocks
+		allocHint := 5000
+		for _, in := range is.samples {
+			if len(in) > allocHint {
+				allocHint = len(in) + 1000
+			}
+		}
+		os := OutputSet{
+			outbufs: make([][]Point, len(h.outputs)),
+		}
+		for idx := range h.outputs {
+			os.outbufs[idx] = make([]Point, 0, allocHint)
+		}
+		os.ownership = is.tr //By default
+
+		//Process
+		h.d.Process(&is, &os)
+
+		fmt.Printf("INF[%s] Process finished\n", h.reg.UniqueName)
+
+		//Write back the data
+		for idx, ostream := range h.outputs {
+			ostream.EraseRange(os.ownership)
+			ostream.WritePoints(os.outbufs[idx])
+		}
+	}
+
+	//Update the tag version
+	for idx, in := range h.inputs {
+		in.SetTagVersion(h.reg.UniqueName, headversions[idx])
+	}
+
+	fmt.Printf("FIN %s \n  >> latest at %s\n  >> took %.2f seconds to compute\n",
+		h.reg.UniqueName, time.Unix(0, lastt), float64(time.Now().Sub(then)/time.Millisecond)/1000.0)
+	return ProcessedData
+}
+
+func (h *handle) ProcessLoop(handles chan struct{}) {
 	for {
-		then := time.Now()
-
-		versions := make([]uint64, len(h.inputs))
-		headversions := make([]uint64, len(h.inputs))
-		some := false
-		for idx, in := range h.inputs {
-			versions[idx] = in.TagVersion(h.reg.UniqueName)
-			headversions[idx] = in.CurrentVersion()
-			if headversions[idx]-versions[idx] > MaxVersionSet {
-				headversions[idx] = versions[idx] + MaxVersionSet
-			}
-			if headversions[idx] != versions[idx] {
-				some = true
-			}
+		hnd := <-handles
+		result := h.processIteration()
+		handles <- hnd
+		switch result {
+		case ProcessedData:
+		case NoData:
+			time.Sleep(15 * time.Second)
+		case Abort:
+			return
 		}
-
-		if !some {
-			fmt.Printf("NOP %s \n", h.reg.UniqueName)
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		//Find the changed ranges
-		chranges := make([]TimeRange, 0, 20)
-		for idx, in := range h.inputs {
-			//10 is an uncreated stream, and BTrDB will return all of time as the
-			//resulting changed range. That causes problems
-			if headversions[idx] == 10 {
-				continue
-			}
-			fmt.Printf("INF[%s] Adding range for versions %v to %v\n", h.reg.UniqueName, versions[idx], headversions[idx])
-			chranges = append(chranges, in.ChangesBetween(versions[idx], headversions[idx])...)
-		}
-		lastt := int64(0)
-
-		//Add merge
-		merged_ranges := expandPrereqsParallel(chranges)
-		for _, r := range merged_ranges {
-			if r.End > lastt {
-				lastt = r.End
-			}
-			//Query the changed data and make blocks
-			is := InputSet{
-				startIndexes: make([]int, len(h.inputs)),
-				samples:      make([][]Point, len(h.inputs)),
-				tr:           r,
-			}
-			originalStartTime := r.Start
-			r.Start -= h.d.LeadNanos()
-			subthen := time.Now()
-			mins := (r.End - r.Start) / int64(60*1e9)
-			if mins > 60*24*30 {
-				fmt.Printf("CRITICAL[%s] aborting this distillate run due to abnornal changed range (%d minutes)\n", h.reg.UniqueName, mins)
-				return
-			}
-			fmt.Printf("INF[%s] Querying inputs for range at %s (%d minutes)\n", h.reg.UniqueName, time.Unix(0, r.Start), mins)
-			total := 0
-			for idx, in := range h.inputs {
-				is.samples[idx] = in.GetPoints(r, h.d.Rebase(), headversions[idx])
-				total += len(is.samples[idx])
-				//Find the index of the original start of range
-				is.startIndexes[idx] = len(is.samples[idx])
-				for search := 0; search < len(is.samples[idx]); search++ {
-					if is.samples[idx][search].T >= originalStartTime {
-						is.startIndexes[idx] = search
-						break
-					}
-				}
-			}
-			fmt.Printf("INF[%s] Query finished (%d points, %d seconds)\n", h.reg.UniqueName, total, time.Now().Sub(subthen)/time.Second)
-			//Create the output data blocks
-			allocHint := 5000
-			for _, in := range is.samples {
-				if len(in) > allocHint {
-					allocHint = len(in) + 1000
-				}
-			}
-			os := OutputSet{
-				outbufs: make([][]Point, len(h.outputs)),
-			}
-			for idx := range h.outputs {
-				os.outbufs[idx] = make([]Point, 0, allocHint)
-			}
-			os.ownership = is.tr //By default
-
-			//Process
-			h.d.Process(&is, &os)
-
-			fmt.Printf("INF[%s] Process finished\n", h.reg.UniqueName)
-
-			//Write back the data
-			for idx, ostream := range h.outputs {
-				ostream.EraseRange(os.ownership)
-				ostream.WritePoints(os.outbufs[idx])
-			}
-		}
-
-		//Update the tag version
-		for idx, in := range h.inputs {
-			in.SetTagVersion(h.reg.UniqueName, headversions[idx])
-		}
-
-		fmt.Printf("FIN %s \n  >> latest at %s\n  >> took %.2f seconds to compute\n",
-			h.reg.UniqueName, time.Unix(0, lastt), float64(time.Now().Sub(then)/time.Millisecond)/1000.0)
 	}
 }
 
