@@ -1,3 +1,5 @@
+//+build ignore
+
 package distil
 
 import (
@@ -5,7 +7,7 @@ import (
 	"math/rand"
 	"testing"
 
-	btrdb "gopkg.in/BTrDB/btrdb.v4"
+	btrdb "gopkg.in/BTrDB/btrdb.v5"
 )
 
 const NANO int64 = 1000000000

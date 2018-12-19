@@ -3,14 +3,15 @@ package distil
 import (
 	"math"
 
-	btrdb "gopkg.in/BTrDB/btrdb.v4"
+	btrdb "github.com/BTrDB/btrdb"
 )
 
 // This specifies an input data preprocessor. It may do anything, but is
 // typically used for rebasing input streams (removing duplicates and)
 // padding missing values
 type Rebaser interface {
-	Process(start, end int64, input chan btrdb.RawPoint) chan btrdb.RawPoint
+	ProcessRaw(start, end int64, input chan btrdb.RawPoint) chan btrdb.RawPoint
+	EstimatePoints(start, end int64, underlyingPoints uint64) uint64
 }
 
 // Return a rebaser that does not modify input data
@@ -20,7 +21,11 @@ func RebasePassthrough() Rebaser {
 
 type noRebase struct{}
 
-func (n *noRebase) Process(start, end int64, input chan btrdb.RawPoint) chan btrdb.RawPoint {
+func (n *noRebase) EstimatePoints(start, end int64, underlyingPoints uint64) uint64 {
+	return underlyingPoints
+}
+
+func (n *noRebase) ProcessRaw(start, end int64, input chan btrdb.RawPoint) chan btrdb.RawPoint {
 	return input
 }
 
@@ -32,7 +37,11 @@ func RebasePadSnap(freq int64) Rebaser {
 	return &padSnapRebaser{freq: freq}
 }
 
-func (rb *padSnapRebaser) Process(start, end int64, input chan btrdb.RawPoint) chan btrdb.RawPoint {
+func (rb *padSnapRebaser) EstimatePoints(start, end int64, underlyingPoints uint64) uint64 {
+	return uint64(((end - start) * rb.freq) / 1e9)
+}
+
+func (rb *padSnapRebaser) ProcessRaw(start, end int64, input chan btrdb.RawPoint) chan btrdb.RawPoint {
 	rv := make(chan btrdb.RawPoint, 1000)
 	const NANO = int64(1000000000)
 	period := NANO / rb.freq
