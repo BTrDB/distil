@@ -30,7 +30,7 @@
   branch = "v5"
 
 [[constraint]]
-  branch = "wip-distil"
+  branch = "v5"
   name = "github.com/PingThingsIO/smartgridstore"
 
 [[constraint]]
