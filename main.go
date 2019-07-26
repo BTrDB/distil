@@ -24,7 +24,6 @@ import (
 	btrdb "github.com/BTrDB/btrdb"
 	"github.com/BTrDB/btrdb/bte"
 	"github.com/PingThingsIO/smartgridstore/modules/operators/distilclient"
-	"github.com/davecgh/go-spew/spew"
 	logging "github.com/op/go-logging"
 	"github.com/pborman/uuid"
 	"github.com/prometheus/client_golang/prometheus"
