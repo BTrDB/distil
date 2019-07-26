@@ -147,6 +147,18 @@ func (i *WindowInput) Get(stream int, sample int) btrdb.StatPoint {
 	return i.samples[stream][realSample]
 }
 
+//Get the index of the given referenceName. Aborts if the reference
+//name does not exist
+func (i *WindowInput) IndexFromReference(refname string) int {
+	for idx := 0; idx < len(i.asn.Inputs); idx++ {
+		if i.asn.Inputs[idx].Name == refname {
+			return idx
+		}
+	}
+	i.asn.Abort("Tried to access undefined input by name %q", refname)
+	return -1
+}
+
 //Get the time range that corresponds with the given window index
 func (i *WindowInput) GetSampleRange(sample int) TimeRange {
 	realSample := sample + i.startIndex
@@ -206,6 +218,18 @@ func (is *Input) Get(stream int, sample int) btrdb.RawPoint {
 		is.asn.Abort("Distillate attempted to access sample outside the InputSet stream=%d sample=%d realsample=%d", stream, sample, realSample)
 	}
 	return is.samples[stream][realSample]
+}
+
+//Get the index of the given referenceName. Aborts if the reference
+//name does not exist
+func (i *Input) IndexFromReference(refname string) int {
+	for idx := 0; idx < len(i.asn.Inputs); idx++ {
+		if i.asn.Inputs[idx].Name == refname {
+			return idx
+		}
+	}
+	i.asn.Abort("Tried to access undefined input by name %q", refname)
+	return -1
 }
 
 //Get the number of positive samples in the given stream that lie within
@@ -286,6 +310,19 @@ func (wout *WindowOutput) Add(stream int, time int64, val float64) {
 	wout.AddPoint(stream, btrdb.RawPoint{Time: time, Value: val})
 }
 
+//Get the index of the given referenceName. Aborts if the reference
+//name does not exist
+func (wout *WindowOutput) IndexFromReference(refname string) int {
+	os := wout.asn.cfg.Outputs
+	for idx := 0; idx < len(os); idx++ {
+		if os[idx].ReferenceName == refname {
+			return idx
+		}
+	}
+	wout.asn.Abort("Tried to access undefined output by name %q", refname)
+	return -1
+}
+
 // OutputSet is a handle onto the output streams and is used for writing back data
 // from processing
 type Output struct {
@@ -312,4 +349,17 @@ func (oss *Output) AddPoint(stream int, p btrdb.RawPoint) {
 // A utility function, this constructs a point and calls AddPoint
 func (oss *Output) Add(stream int, time int64, val float64) {
 	oss.AddPoint(stream, btrdb.RawPoint{Time: time, Value: val})
+}
+
+//Get the index of the given referenceName. Aborts if the reference
+//name does not exist
+func (oss *Output) IndexFromReference(refname string) int {
+	os := oss.asn.cfg.Outputs
+	for idx := 0; idx < len(os); idx++ {
+		if os[idx].ReferenceName == refname {
+			return idx
+		}
+	}
+	oss.asn.Abort("Tried to access undefined output by name %q", refname)
+	return -1
 }
