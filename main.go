@@ -24,7 +24,6 @@ import (
 	btrdb "github.com/BTrDB/btrdb"
 	"github.com/BTrDB/btrdb/bte"
 	"github.com/PingThingsIO/smartgridstore/modules/operators/distilclient"
-	"github.com/davecgh/go-spew/spew"
 	logging "github.com/op/go-logging"
 	"github.com/pborman/uuid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -482,7 +481,7 @@ func (asn *Assignment) MandatoryIntegerParameter(name string) int64 {
 	return pi
 }
 
-//Try parse a parameter as an integer and abort on failure
+//Try parse a parameter as an float and abort on failure
 func (asn *Assignment) MandatoryFloatParameter(name string) float64 {
 	p, ok := asn.Parameters[name]
 	if !ok {
@@ -491,6 +490,19 @@ func (asn *Assignment) MandatoryFloatParameter(name string) float64 {
 	pf, err := strconv.ParseFloat(p, 64)
 	if err != nil {
 		asn.Abort("mandatory float parameter %q failed to parse", name)
+	}
+	return pf
+}
+
+//Try parse a parameter as an boolean and abort on failure
+func (asn *Assignment) MandatoryBoolParameter(name string) bool {
+	p, ok := asn.Parameters[name]
+	if !ok {
+		asn.Abort("missing mandatory parameter %q", name)
+	}
+	pf, err := strconv.ParseBool(p)
+	if err != nil {
+		asn.Abort("mandatory bool parameter %q failed to parse", name)
 	}
 	return pf
 }
@@ -508,7 +520,7 @@ func (asn *Assignment) OptionalIntegerParameter(name string) (int64, bool) {
 	return pi, true
 }
 
-//Try parse a parameter as an integer and abort on failure
+//Try parse a parameter as an float
 func (asn *Assignment) OptionalFloatParameter(name string) (float64, bool) {
 	p, ok := asn.Parameters[name]
 	if !ok {
@@ -517,6 +529,19 @@ func (asn *Assignment) OptionalFloatParameter(name string) (float64, bool) {
 	pf, err := strconv.ParseFloat(p, 64)
 	if err != nil {
 		return 0, false
+	}
+	return pf, true
+}
+
+//Try parse a parameter as an boolean
+func (asn *Assignment) OptionalBoolParameter(name string) (bool, bool) {
+	p, ok := asn.Parameters[name]
+	if !ok {
+		return false, false
+	}
+	pf, err := strconv.ParseBool(p)
+	if err != nil {
+		return false, false
 	}
 	return pf, true
 }
