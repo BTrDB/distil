@@ -396,8 +396,11 @@ nextassignment:
 			a.inputs[idx] = s
 		}
 
-		a.cfg = a.algorithm.Config(a)
-
+		cfg, ok := configWrapper(a.algorithm.Config, a)
+		if !ok {
+			continue nextassignment
+		}
+		a.cfg = cfg
 		colprefix := a.Parameters["_collectionprefix"]
 		a.outputs = make([]*btrdb.Stream, len(a.cfg.Outputs))
 		for idx, os := range a.cfg.Outputs {
@@ -456,6 +459,26 @@ func (ds *DISTIL) StartEngine() {
 	for {
 		time.Sleep(10 * time.Second)
 	}
+}
+
+func configWrapper(f func(a *Assignment) *Config, asn *Assignment) (cfg *Config, okay bool) {
+	defer func() {
+		err := recover()
+		if err != nil {
+			stack := debug.Stack()
+			scanner := bufio.NewScanner(bytes.NewBuffer(stack))
+			asn.Error("Assignment config terminal error: %v", err)
+			for scanner.Scan() {
+				asn.Error("%s", scanner.Text())
+			}
+			asn.Error("could not complete config: %v", err)
+			cfg = nil
+			okay = false
+			return
+		}
+	}()
+	rv := f(asn)
+	return rv, true
 }
 
 //Return the underlying BTrDB streams for the assignment inputs
