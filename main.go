@@ -356,6 +356,7 @@ nextassignment:
 		a.Extra = ua.Extra
 		a.Instance = ua.Name
 		a.Subname = ua.Subname
+		a.Inputs = ua.InputStreams
 		a.algorithm = ds.alg
 		a.ID = stableHash(a.Instance, a.Subname, "ID")
 		a.bdb = ds.connectBDB(apikey)
