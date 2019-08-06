@@ -286,7 +286,8 @@ func (ds *DISTIL) loadassignmentState(asn uuid.UUID) (*assignmentState, error) {
 	s, ok := ds.astates[asn.Array()]
 	if ok {
 		ds.astatemu.Unlock()
-		return s, nil
+		copy := *s
+		return &copy, nil
 	}
 	defer ds.astatemu.Unlock()
 	rvk, err := ds.etcd.Get(context.Background(), "distil/state/"+asn.String())
@@ -639,6 +640,8 @@ func (asn *Assignment) processIteration() (ir iterationResult, exiterr error) {
 		//Initialize the cursor
 		astate.Cursortime = math.MinInt64
 		astate.InProgress = true
+	} else {
+		asn.Info("astate in progress")
 	}
 
 	//Intersect with the ProcessX limits
